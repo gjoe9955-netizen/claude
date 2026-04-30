@@ -686,22 +686,48 @@ async def handle_pronostico(message):
     if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
     if not serper_txt: serper_txt = " Sin bajas detectadas"
 
-    header = (
-        f"<b>🛠 REPORTE V10:</b> {'✅' if check_odds else '❌'} Mercado | "
-        f"{'✅' if check_json else '❌'} Poisson 7x7+DC ({p_percent:.1f}%) | "
-        f"{'✅' if check_h2h else '❌'} H2H\n"
-        f"<b>⚽ Lambdas:</b> λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f})\n"
-        f"<b>🔄 H2H (sede):</b> {h2h_texto} → {h2h_ajuste_txt}\n"
-        f"<b>📅 Forma:</b> {forma_local_txt} | {forma_visita_txt}\n"
-        f"<b>🏆 Tabla:</b> {tabla_texto}\n"
-        f"<b>📰 Serper:</b>{serper_txt}\n"
-        f"<b>📊 Mercado:</b> Local={c_l} | Empate={c_e} | Visita={c_v} | overround={overround:.3f}\n"
-        f"<b>🔬 Prob. mercado:</b> Simple={prob_market_simple*100:.1f}% | Shin={shin_l*100:.1f}% | Promedio={prob_market*100:.1f}%\n"
-        f"<b>🧮 Shin:</b> z={shin_z:.4f} ({shin_z_txt}) | {shin_confianza}\n"
-        f"<b>📊 Calibración:</b> ×{calib_txt} | {ou_texto}\n"
-        f"<b>🎲 Empate:</b> {empate_aviso}\n"
-        f"{'—'*20}\n"
+    # Bloque de decisión: lo primero que ve el usuario
+    if pick_final == "No Bet":
+        decision_block = (
+            f"<b>╔{'═'*22}╗</b>\n"
+            f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
+            f"<b>╚{'═'*22}╝</b>\n"
+        )
+    else:
+        decision_block = (
+            f"<b>╔{'═'*22}╗</b>\n"
+            f"<b>║  {nivel:<22}║</b>\n"
+            f"<b>║  🎯 {pick_final:<20}║</b>\n"
+            f"<b>║  💰 Stake: {stake}% del bankroll{' '*(9-len(str(stake)))}║</b>\n"
+            f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_ajustado*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
+            f"<b>╚{'═'*22}╝</b>\n"
+        )
+
+    # Bloque de señales técnicas compacto
+    signals_block = (
+        f"\n<b>◆ SEÑALES</b>\n"
+        f"<code>"
+        f"Poisson  {p_percent:.1f}%  λH {lh:.2f} λA {la:.2f}\n"
+        f"Mercado  Simple {prob_market_simple*100:.1f}%  Shin {shin_l*100:.1f}%\n"
+        f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
+        f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}\n"
+        f"Calib    ×{calib_txt}  {ou_texto[:28]}\n"
+        f"Empate   {empate_aviso[:38]}"
+        f"</code>\n"
     )
+
+    # Bloque de contexto deportivo
+    context_block = (
+        f"\n<b>◆ CONTEXTO</b>\n"
+        f"<b>H2H</b> {h2h_texto} → {h2h_ajuste_txt}\n"
+        f"<b>🏠</b> {forma_local_txt}\n"
+        f"<b>🚩</b> {forma_visita_txt}\n"
+        f"<b>🏆</b> {tabla_texto}\n"
+        f"<b>📰</b>{serper_txt}\n"
+        f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {'✅' if check_h2h else '❌'} H2H</b>\n"
+    )
+
+    header = decision_block + signals_block + context_block
 
     # ============================================================
     # PROMPT ESTRATEGA — Todos los datos disponibles
@@ -783,7 +809,8 @@ INSTRUCCIONES PARA TU ANÁLISIS:
 
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
     analisis = html.escape(analisis_raw)
-    footer = f"\n\n{'—'*20}\n🛰 <b>ESTRATEGA:</b> <code>{SISTEMA_IA['estratega']['api']}</code>"
+
+    nodos_txt = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
     if SISTEMA_IA["auditor"]["nodo"]:
         prompt_a = (
@@ -798,10 +825,13 @@ INSTRUCCIONES PARA TU ANÁLISIS:
             f"¿Hay alguna contradicción entre el análisis y los datos? Resumen muy breve (máx 60 palabras)."
         )
         auditoria_raw = await ejecutar_ia("auditor", prompt_a)
-        footer += f"\n🛡 <b>AUDITOR:</b> <code>{SISTEMA_IA['auditor']['api']}</code>"
-        final = f"{header}{analisis}\n\n{html.escape(auditoria_raw)}{footer}"
+        nodos_txt += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
+        auditor_block = f"\n\n<b>◆ AUDITOR</b>\n{html.escape(auditoria_raw)}"
     else:
-        final = f"{header}{analisis}{footer}"
+        auditor_block = ""
+
+    footer = f"\n\n<i>{'—'*18}\nV10 · {nodos_txt}</i>"
+    final = f"{header}{analisis}{auditor_block}{footer}"
 
     await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode='HTML')
 
@@ -928,12 +958,37 @@ async def cmd_validar(message):
 
 @bot.message_handler(commands=['partidos'])
 async def cmd_partidos(message):
+    from collections import defaultdict
     data = await api_football_call("matches?status=SCHEDULED")
     if not data: return
-    txt = "📅 <b>PARTIDOS (HORA JUÁREZ)</b>\n\n"
-    for m in data['matches'][:10]:
+
+    matches = data['matches'][:10]
+    if not matches:
+        await bot.reply_to(message, "📭 No hay partidos programados."); return
+
+    dias_es = {
+        'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
+    }
+
+    por_fecha = defaultdict(list)
+    for m in matches:
         dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) + timedelta(hours=OFFSET_JUAREZ)
-        txt += f"🕒 <code>{dt.strftime('%H:%M')}</code> | <code>{dt.strftime('%d/%m')}</code>\n🏠 <b>{m['homeTeam']['shortName']}</b> vs 🚩 <b>{m['awayTeam']['shortName']}</b>\n{'—'*15}\n"
+        fecha_key = dt.strftime('%A %d/%m')
+        for en, es in dias_es.items():
+            fecha_key = fecha_key.replace(en, es)
+        por_fecha[fecha_key].append((dt, m))
+
+    txt = "⚽ <b>PRÓXIMOS PARTIDOS</b>  <i>· hora Juárez</i>\n"
+    for fecha_key, partidos in por_fecha.items():
+        txt += f"\n<b>── {fecha_key} ──</b>\n"
+        for dt, m in partidos:
+            home = m['homeTeam']['shortName']
+            away = m['awayTeam']['shortName']
+            txt += f"<code>{dt.strftime('%H:%M')}</code>  <b>{home}</b> <i>vs</i> <b>{away}</b>\n"
+
+    ejemplo = f"{matches[0]['homeTeam']['shortName']} vs {matches[0]['awayTeam']['shortName']}"
+    txt += f"\n<i>Ej: /pronostico {ejemplo}</i>"
     await bot.reply_to(message, txt, parse_mode='HTML')
 
 @bot.message_handler(commands=['tabla'])
