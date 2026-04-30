@@ -636,9 +636,63 @@ async def handle_pronostico(message):
     else:
         empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
 
+    # Variables de pick de riesgo (se calculan siempre)
+    # Probabilidades Poisson para empate y visitante
+    prob_poisson_empate = 0
+    prob_poisson_visita = 0
+    for x in range(7):
+        for y in range(7):
+            p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
+            if x == y:
+                prob_poisson_empate += p
+            elif y > x:
+                prob_poisson_visita += p
+
+    prob_poisson_empate_cal = prob_poisson_empate * factor_calibracion
+    prob_poisson_visita_cal = prob_poisson_visita * factor_calibracion
+
+    prob_market_e = (shin_e + (1/c_e)/overround) / 2
+    prob_market_v = (shin_v + (1/c_v)/overround) / 2
+
+    edge_empate  = (prob_poisson_empate_cal  - prob_market_e) - margen_error
+    edge_visita  = (prob_poisson_visita_cal  - prob_market_v) - margen_error
+
+    # Pick principal (local)
     if edge_ajustado <= 0:
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
         ou_factor = 1.0
+
+        # --- Pick de riesgo: empate o visitante con mayor edge ---
+        mejor_edge_riesgo = max(edge_empate, edge_visita)
+        if mejor_edge_riesgo > 0:
+            if edge_empate >= edge_visita:
+                pick_riesgo_nombre = f"Empate"
+                pick_riesgo_cuota  = c_e
+                edge_riesgo        = edge_empate
+                prob_riesgo        = prob_poisson_empate_cal * 100
+            else:
+                pick_riesgo_nombre = m_v
+                pick_riesgo_cuota  = c_v
+                edge_riesgo        = edge_visita
+                prob_riesgo        = prob_poisson_visita_cal * 100
+
+            # Kelly fraccionado con cap 1.0% para pick de riesgo
+            kelly_riesgo = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
+            stake_riesgo = round(min(max(kelly_riesgo * 100, 0.25), 1.0), 2)
+
+            if stake_riesgo < 0.50:
+                nivel_riesgo = "RIESGO BAJO ⚠️"
+            elif stake_riesgo < 0.75:
+                nivel_riesgo = "RIESGO MEDIO 🎲"
+            else:
+                nivel_riesgo = "RIESGO ALTO 🔴"
+        else:
+            pick_riesgo_nombre = None
+            stake_riesgo       = 0
+            nivel_riesgo       = ""
+            edge_riesgo        = 0
+            prob_riesgo        = 0
+            pick_riesgo_cuota  = 0
     else:
         kelly_full = edge_ajustado / (c_l - 1)
         kelly_fraccionado = kelly_full * 0.25
@@ -646,6 +700,12 @@ async def handle_pronostico(message):
         stake = round(stake_base * ou_factor, 2)
         stake = max(0.25, min(stake, 3.0))
         pick_final = m_l
+        pick_riesgo_nombre = None
+        stake_riesgo = 0
+        nivel_riesgo = ""
+        edge_riesgo = 0
+        prob_riesgo = 0
+        pick_riesgo_cuota = 0
         if stake < 0.75:
             nivel = "BRONCE 🥉"
         elif stake < 1.25:
@@ -667,6 +727,8 @@ async def handle_pronostico(message):
             "edge": f"{edge_ajustado*100:.1f}%",
             "stake": f"{stake}%",
             "nivel": nivel,
+            "pick_riesgo": pick_riesgo_desc,
+            "stake_riesgo": f"{stake_riesgo}%" if stake_riesgo else "0%",
             "status": "⏳ PENDIENTE"
         })
 
@@ -688,11 +750,23 @@ async def handle_pronostico(message):
 
     # Bloque de decisión: lo primero que ve el usuario
     if pick_final == "No Bet":
-        decision_block = (
-            f"<b>╔{'═'*22}╗</b>\n"
-            f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
-            f"<b>╚{'═'*22}╝</b>\n"
-        )
+        if pick_riesgo_nombre:
+            decision_block = (
+                f"<b>╔{'═'*22}╗</b>\n"
+                f"<b>║  🚫 NO BET — LOCAL          ║</b>\n"
+                f"<b>╠{'═'*22}╣</b>\n"
+                f"<b>║  {nivel_riesgo:<22}║</b>\n"
+                f"<b>║  🎲 {pick_riesgo_nombre:<20}║</b>\n"
+                f"<b>║  💰 Stake: {stake_riesgo}% (riesgo){' '*(8-len(str(stake_riesgo)))}║</b>\n"
+                f"<b>║  📈 Prob: {prob_riesgo:.1f}%  Edge: {edge_riesgo*100:.1f}%{' '*(6-len(f'{prob_riesgo:.1f}'))}║</b>\n"
+                f"<b>╚{'═'*22}╝</b>\n"
+            )
+        else:
+            decision_block = (
+                f"<b>╔{'═'*22}╗</b>\n"
+                f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
+                f"<b>╚{'═'*22}╝</b>\n"
+            )
     else:
         decision_block = (
             f"<b>╔{'═'*22}╗</b>\n"
@@ -728,6 +802,12 @@ async def handle_pronostico(message):
     )
 
     header = decision_block + signals_block + context_block
+
+    # Variables auxiliares para el prompt de riesgo
+    edge_empate_pct = edge_empate * 100
+    edge_visita_pct = edge_visita * 100
+    pick_riesgo_desc = pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"
+    pick_riesgo_cuota_desc = str(pick_riesgo_cuota) if pick_riesgo_cuota else "N/A"
 
     # ============================================================
     # PROMPT ESTRATEGA — Todos los datos disponibles
@@ -788,16 +868,27 @@ PARTIDO: {m_l} vs {m_v}
 •{serper_txt}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
 
+── PICK DE RIESGO (cuando NO BET en local) ──
+• Edge empate (Poisson vs mercado): {edge_empate_pct:.2f}%
+• Edge visitante (Poisson vs mercado): {edge_visita_pct:.2f}%
+• Pick de riesgo seleccionado: {pick_riesgo_desc}
+• Cuota pick riesgo: {pick_riesgo_cuota_desc}
+• Prob. modelo pick riesgo: {prob_riesgo:.1f}%
+• Stake sugerido pick riesgo: {stake_riesgo}% (cap 1.0%, Kelly×0.25)
+
 ═══════════════════════════════════════
 RESULTADO DEL MODELO
-🎯 PICK: {pick_final}
+🎯 PICK PRINCIPAL: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
+🎲 PICK RIESGO: {pick_riesgo_desc}
 ═══════════════════════════════════════
 
 INSTRUCCIONES PARA TU ANÁLISIS:
-1. Si edge ajustado ≤ 0, declara NO BET y explica brevemente la razón principal.
-2. Si edge > 0, redacta un análisis de máximo 130 palabras que integre:
+1. Si edge ajustado ≤ 0 en local, declara NO BET local y explica brevemente la razón.
+   - Si hay pick de riesgo válido (edge > 0 en empate o visitante), analiza brevemente por qué existe valor ahí.
+   - Aclara siempre que es una apuesta de mayor riesgo.
+2. Si edge > 0 en local, redacta un análisis de máximo 130 palabras que integre:
    a) Qué dice el modelo Poisson vs el mercado (edge real y ajustado).
    b) Si Shin y la normalización simple coinciden o divergen, y qué implica eso.
    c) Si la forma reciente y la tabla refuerzan o contradicen el pronóstico estadístico.
