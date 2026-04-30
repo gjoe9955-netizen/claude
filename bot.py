@@ -55,15 +55,12 @@ async def obtener_modelo():
     return _MODELO_CACHE["data"], False
 
 # --- Función de Búsqueda de Última Hora (Serper) ---
-# MEJORA 5: Serper ahora devuelve también un factor de penalización numérico
 PALABRAS_BAJA_LOCAL = ["baja", "lesión", "lesionado", "no jugará", "ausente", "descartado", "out"]
-PALABRAS_BAJA_VISITA = PALABRAS_BAJA_LOCAL  # misma lista
+PALABRAS_BAJA_VISITA = PALABRAS_BAJA_LOCAL
 
 async def obtener_contexto_real(l_q, v_q):
     """
     Devuelve (texto_noticias, factor_penalty_local, factor_penalty_visita).
-    - factor_penalty_local: 0.95 si se detectan bajas del equipo local, 1.0 si no.
-    - factor_penalty_visita: 0.95 si se detectan bajas del visitante, 1.0 si no.
     """
     if not SERPER_KEY:
         return "No hay API Key de Serper configurada.", 1.0, 1.0
@@ -95,12 +92,10 @@ async def obtener_contexto_real(l_q, v_q):
             texto_completo = snippet + " " + titulo
             contexto += f"- {item['title']}: {item['snippet']}\n"
 
-            # Detectar menciones de bajas del local
             if l_q.lower() in texto_completo:
                 if any(p in texto_completo for p in PALABRAS_BAJA_LOCAL):
                     penalty_local = 0.95
 
-            # Detectar menciones de bajas del visitante
             if v_q.lower() in texto_completo:
                 if any(p in texto_completo for p in PALABRAS_BAJA_VISITA):
                     penalty_visita = 0.95
@@ -270,14 +265,8 @@ async def api_football_call(endpoint):
         return r.json() if r.status_code == 200 else None
     except: return None
 
-# --- MEJORA 3: H2H filtrado por sede ---
+# --- H2H filtrado por sede ---
 async def obtener_h2h_directo(id_l, id_v):
-    """
-    Devuelve el H2H filtrado por sede:
-    - Solo cuenta victorias del LOCAL cuando id_l era HOME_TEAM
-    - Solo cuenta victorias del VISITANTE cuando id_v era HOME_TEAM
-    Esto elimina el sesgo de contar victorias fuera de casa como si fueran en casa.
-    """
     if not id_l or not id_v:
         return "H2H: Sin IDs válidos.", False, 0, 0, 0
     
@@ -292,13 +281,11 @@ async def obtener_h2h_directo(id_l, id_v):
                 for m in matches[:5]:
                     w = m['score']['winner']
                     home_id = m['homeTeam']['id']
-                    # Solo contamos si id_l fue realmente local en ese partido
                     if home_id == id_l:
                         if w == 'HOME_TEAM': l += 1
                         elif w == 'AWAY_TEAM': v += 1
                         else: e += 1
                     else:
-                        # id_l fue visitante: invertimos la perspectiva
                         if w == 'HOME_TEAM': v += 1
                         elif w == 'AWAY_TEAM': l += 1
                         else: e += 1
@@ -310,10 +297,6 @@ async def obtener_h2h_directo(id_l, id_v):
 
 
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
-    """
-    Convierte el historial H2H en un factor de ajuste para las lambdas de Poisson.
-    Peso máximo ±8%, solo actúa si un equipo ganó >60% de los H2H.
-    """
     if total_partidos < 3:
         return 1.0, 1.0, "H2H: Insuficientes datos"
 
@@ -341,16 +324,8 @@ def calcular_factor_h2h(home_wins, away_wins, total_partidos):
     return factor_lh, factor_la, texto
 
 
-# --- MEJORA 1: Forma reciente (últimos 5 partidos) ---
+# --- Forma reciente (últimos 5 partidos) ---
 async def obtener_forma_reciente(team_id):
-    """
-    Consulta los últimos 5 partidos FINISHED del equipo.
-    Devuelve (factor_lh, factor_la, texto) donde:
-    - 5W → factor_ataque=+10%, factor_defensa=-10%
-    - 5L → factor_ataque=-10%, factor_defensa=+10%
-    - Escala proporcional entre ambos extremos.
-    El factor se aplica sobre las lambdas del equipo correspondiente.
-    """
     if not team_id:
         return 1.0, 1.0, "Forma: Sin ID"
 
@@ -374,20 +349,17 @@ async def obtener_forma_reciente(team_id):
                 puntos += 3
             elif w == 'DRAW':
                 puntos += 1
-            # derrota: 0 puntos
 
-        # Escala: 0pts (forma 0.0) → 15pts (forma 1.0)
-        # Zona neutra 5-10pts: sin ajuste
         MAX_AJUSTE = 0.10
-        forma_norm = puntos / 15.0  # 0.0 a 1.0
+        forma_norm = puntos / 15.0
 
-        if forma_norm > 0.67:  # >10 pts: buen momento
+        if forma_norm > 0.67:
             intensidad = (forma_norm - 0.67) / 0.33
             ajuste = MAX_AJUSTE * intensidad
             factor_ataque = 1.0 + ajuste
             factor_defensa = 1.0 - ajuste
             simbolo = "🔥"
-        elif forma_norm < 0.33:  # <5 pts: mal momento
+        elif forma_norm < 0.33:
             intensidad = (0.33 - forma_norm) / 0.33
             ajuste = MAX_AJUSTE * intensidad
             factor_ataque = 1.0 - ajuste
@@ -406,12 +378,8 @@ async def obtener_forma_reciente(team_id):
         return 1.0, 1.0, "Forma: Error API"
 
 
-# --- MEJORA 2: Posición en tabla ---
+# --- Posición en tabla ---
 async def obtener_posiciones_tabla():
-    """
-    Devuelve dict {team_id: {pos, puntos}} para calcular diferencia de posición.
-    Usa el endpoint de standings de Football-Data.
-    """
     try:
         data = await api_football_call("standings")
         if not data:
@@ -430,26 +398,20 @@ async def obtener_posiciones_tabla():
 
 
 def calcular_factor_tabla(pos_local, pos_visita, pts_local, pts_visita):
-    """
-    Ajusta lambdas según diferencia de posición en tabla.
-    - Diferencia >6 posiciones a favor del local: lh sube hasta 6%
-    - Diferencia >6 posiciones a favor del visitante: la sube hasta 6%
-    - Peso conservador: máx ±6% para no dominar sobre Poisson.
-    """
     MAX_AJUSTE = 0.06
-    diff_pos = pos_visita - pos_local  # positivo = local mejor posicionado
+    diff_pos = pos_visita - pos_local
 
     if abs(diff_pos) < 6:
         return 1.0, 1.0, f"Tabla ⚖️ Diferencia leve ({pos_local}° vs {pos_visita}°, {pts_local}pts vs {pts_visita}pts)"
 
-    intensidad = min((abs(diff_pos) - 6) / 14, 1.0)  # escala 6-20 diff → 0-1
+    intensidad = min((abs(diff_pos) - 6) / 14, 1.0)
     ajuste = MAX_AJUSTE * intensidad
 
-    if diff_pos > 0:  # local mejor posicionado
+    if diff_pos > 0:
         factor_lh = 1.0 + ajuste
         factor_la = 1.0 - ajuste
         texto = f"Tabla 📈 Local superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% lh)"
-    else:  # visitante mejor posicionado
+    else:
         factor_lh = 1.0 - ajuste
         factor_la = 1.0 + ajuste
         texto = f"Tabla 📉 Visita superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% la)"
@@ -472,6 +434,71 @@ def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
     return 1.0
 
 
+# ============================================================
+# NUEVO: Método Shin (1993)
+# ============================================================
+def calcular_shin(odds_l, odds_e, odds_v):
+    """
+    Método Shin (1993): estima probabilidades verdaderas desde cuotas
+    modelando el porcentaje de apostadores con información privilegiada (z).
+    
+    - z cercano a 0: mercado eficiente, poca info privilegiada
+    - z cercano a 0.05+: mercado con insiders activos (más distorsión en cuotas altas)
+    
+    Devuelve (prob_l, prob_e, prob_v, z)
+    """
+    p_raw = [1 / odds_l, 1 / odds_e, 1 / odds_v]
+    n = len(p_raw)
+    overround = sum(p_raw)
+
+    z = 0.0
+    p_shin = p_raw[:]
+
+    for _ in range(1000):
+        p_shin_nuevo = []
+        for p in p_raw:
+            discriminante = z ** 2 + 4 * (1 - z) * (p / overround)
+            p_shin_nuevo.append((discriminante ** 0.5 - z) / (2 * (1 - z)))
+
+        suma = sum(p_shin_nuevo)
+        min_p = min(p_shin_nuevo)
+        denominador = suma - n * min_p
+        if denominador == 0:
+            break
+        z_nuevo = (suma - 1) / denominador
+        if abs(z_nuevo - z) < 1e-9:
+            p_shin = p_shin_nuevo
+            break
+        z = z_nuevo
+        p_shin = p_shin_nuevo
+
+    # Normalizar para garantizar suma = 1
+    total = sum(p_shin)
+    p_shin = [p / total for p in p_shin]
+    return p_shin[0], p_shin[1], p_shin[2], z
+
+
+def interpretar_shin(divergencia, z):
+    """
+    Interpreta la divergencia entre Shin y normalización simple.
+    Devuelve (texto_confianza, factor_shin) que penaliza el edge si divergen.
+    """
+    if divergencia < 0.02:
+        confianza = "✅ Alta (Shin≈Simple, señal sólida)"
+        factor = 1.0
+    elif divergencia < 0.04:
+        confianza = "⚠️ Media (divergencia leve, cautela)"
+        factor = 0.85
+    else:
+        confianza = "🚨 Baja (métodos divergen, señal débil)"
+        factor = 0.70
+
+    z_txt = "bajo (mercado eficiente)" if z < 0.02 else ("medio" if z < 0.04 else "alto (posibles insiders)")
+    return confianza, factor, z_txt
+
+
+# ============================================================
+
 # --- Lógica de validación unificada ---
 PICKS_VOID = ["no bet", "no apostar", "no apostar (sin valor)", "sin valor"]
 
@@ -487,7 +514,7 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
         return "✅ WIN"
     return "❌ LOSS"
 
-# --- Comando Principal: Pronóstico V9 ---
+# --- Comando Principal: Pronóstico V10 ---
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
     if not SISTEMA_IA["estratega"]["nodo"]:
@@ -498,7 +525,7 @@ async def handle_pronostico(message):
         await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
     l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V9 (Poisson + DC + H2H-Sede + Forma + Tabla + Odds)...")
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V10 (Poisson+DC+H2H+Forma+Tabla+Odds+Shin)...")
 
     full_data, check_json = await obtener_modelo()
     if not full_data:
@@ -516,7 +543,7 @@ async def handle_pronostico(message):
     id_v = v_s.get("id_api")
     logging.info(f"[H2H] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
 
-    # Todas las consultas externas EN PARALELO con asyncio.gather
+    # Todas las consultas externas EN PARALELO
     (
         (c_l, c_e, c_v, check_odds),
         (contexto_noticias, penalty_local, penalty_visita),
@@ -534,7 +561,6 @@ async def handle_pronostico(message):
         obtener_forma_reciente(id_v),
         obtener_posiciones_tabla()
     )
-    logging.info(f"[H2H] resultado={h2h} | check={check_h2h} | wins_l={home_wins} wins_v={away_wins} total={total_h2h}")
 
     # --- PASO 1: Lambdas base desde Poisson ---
     avg = full_data[liga]['averages']
@@ -545,10 +571,8 @@ async def handle_pronostico(message):
     factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
 
     # --- PASO 3: Ajuste forma reciente ---
-    # Forma local afecta lh (ataque) y la resistencia defensiva que enfrenta el visitante
-    # Forma visita afecta la (ataque visitante) y la resistencia defensiva que enfrenta el local
-    factor_lh_forma = forma_local_atk      # local en buen momento ataca mejor
-    factor_la_forma = forma_visita_atk     # visita en buen momento ataca mejor
+    factor_lh_forma = forma_local_atk
+    factor_la_forma = forma_visita_atk
 
     # --- PASO 4: Ajuste tabla ---
     factor_lh_tabla, factor_la_tabla, tabla_texto = 1.0, 1.0, "Tabla: Sin datos"
@@ -574,12 +598,21 @@ async def handle_pronostico(message):
     # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 8: Normalizar odds (quitar margen de la casa) ---
-    # Sin normalizar, prob_market esta inflada 3-6% por el overround
-    overround = (1/c_l) + (1/c_e) + (1/c_v)
-    prob_market = (1 / c_l) / overround  # probabilidad justa sin margen
+    # --- PASO 8: Normalización simple + Shin (validación cruzada) ---
+    overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
+    prob_market_simple = (1 / c_l) / overround  # normalización simple
 
-    # Mezcla final Poisson(90%) + Mercado normalizado(10%)
+    # Shin: redistribuye considerando info privilegiada en el mercado
+    shin_l, shin_e, shin_v, shin_z = calcular_shin(c_l, c_e, c_v)
+
+    # Divergencia entre métodos → señal de confianza
+    divergencia_shin = abs(shin_l - prob_market_simple)
+    shin_confianza, shin_factor, shin_z_txt = interpretar_shin(divergencia_shin, shin_z)
+
+    # Prob mercado final = promedio de ambos métodos
+    prob_market = (prob_market_simple + shin_l) / 2
+
+    # Mezcla final: Poisson(90%) + Mercado promedio(10%)
     p_win = (prob_poisson_calibrado * 0.90) + (prob_market * 0.10)
     p_percent = p_win * 100
 
@@ -588,15 +621,15 @@ async def handle_pronostico(message):
 
     # --- PASO 10: Edge y Kelly ---
     edge_real = p_win - prob_market
-    margen_error = 0.005  # reducido de 1% a 0.5%
-    edge_ajustado = edge_real - margen_error
+    margen_error = 0.005
+    # Shin penaliza el edge si los métodos divergen
+    edge_ajustado = (edge_real - margen_error) * shin_factor
 
-    # Filtro cuotas trampa: solo actua en cuotas muy bajas
+    # Filtro cuotas trampa
     if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
 
-    # MEJORA 6: Cuota del empate como filtro adicional
-    # Si c_e < 3.0, el mercado dice partido muy parejo → reducir edge un 20%
+    # Cuota del empate como filtro adicional
     if c_e < 3.0 and edge_ajustado > 0:
         edge_ajustado *= 0.80
         empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge reducido 20%"
@@ -646,7 +679,7 @@ async def handle_pronostico(message):
         asyncio.create_task(task_github())
 
     # --- Construir textos resumen de ajustes ---
-    calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos)"
+    calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
     h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
     serper_txt = ""
     if penalty_local < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
@@ -654,7 +687,7 @@ async def handle_pronostico(message):
     if not serper_txt: serper_txt = " Sin bajas detectadas"
 
     header = (
-        f"<b>🛠 REPORTE V9:</b> {'✅' if check_odds else '❌'} Mercado | "
+        f"<b>🛠 REPORTE V10:</b> {'✅' if check_odds else '❌'} Mercado | "
         f"{'✅' if check_json else '❌'} Poisson 7x7+DC ({p_percent:.1f}%) | "
         f"{'✅' if check_h2h else '❌'} H2H\n"
         f"<b>⚽ Lambdas:</b> λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f})\n"
@@ -662,39 +695,90 @@ async def handle_pronostico(message):
         f"<b>📅 Forma:</b> {forma_local_txt} | {forma_visita_txt}\n"
         f"<b>🏆 Tabla:</b> {tabla_texto}\n"
         f"<b>📰 Serper:</b>{serper_txt}\n"
-        f"<b>📊 Mercado:</b> c_l={c_l} | overround={overround:.3f} | prob_justa={prob_market*100:.1f}%\n"
+        f"<b>📊 Mercado:</b> Local={c_l} | Empate={c_e} | Visita={c_v} | overround={overround:.3f}\n"
+        f"<b>🔬 Prob. mercado:</b> Simple={prob_market_simple*100:.1f}% | Shin={shin_l*100:.1f}% | Promedio={prob_market*100:.1f}%\n"
+        f"<b>🧮 Shin:</b> z={shin_z:.4f} ({shin_z_txt}) | {shin_confianza}\n"
         f"<b>📊 Calibración:</b> ×{calib_txt} | {ou_texto}\n"
         f"<b>🎲 Empate:</b> {empate_aviso}\n"
         f"{'—'*20}\n"
     )
 
-    # --- Prompt IA con todos los datos ---
+    # ============================================================
+    # PROMPT ESTRATEGA — Todos los datos disponibles
+    # ============================================================
     prompt_e = f"""
-Eres analista profesional de fútbol. Partido: {m_l} vs {m_v}
+Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en apostar por la victoria del equipo local.
 
-DATOS MATEMÁTICOS:
-- Prob. victoria local (modelo): {p_percent:.1f}%
-- Cuota mercado local: {c_l} (implica {prob_market*100:.1f}%)
-- Edge ajustado: {edge_ajustado*100:.2f}%
-- H2H últimos partidos (sede-corregido): {h2h} → ajuste: {h2h_ajuste_txt}
-- Forma reciente local: {forma_local_txt}
-- Forma reciente visita: {forma_visita_txt}
-- Posición en tabla: {tabla_texto}
-- Bajas detectadas (Serper):{serper_txt}
-- Cuota empate: {c_e:.2f} ({empate_aviso})
-- Señal O/U: {ou_texto}
-- Lambda local ajustada: {lh:.2f} goles esperados
-- Lambda visita ajustada: {la:.2f} goles esperados
+═══════════════════════════════════════
+PARTIDO: {m_l} vs {m_v}
+═══════════════════════════════════════
 
-INSTRUCCIONES:
-1. Si edge <= 0, di NO BET y explica brevemente por qué no hay valor.
-2. Si edge > 0, explica en máximo 120 palabras por qué hay valor combinando Poisson, forma reciente, H2H, tabla y mercado.
-3. Menciona si la forma reciente y la tabla refuerzan o contradicen el pronóstico estadístico.
-4. Si hay bajas detectadas, pondera su impacto.
+── MODELO POISSON + DIXON-COLES ──
+• Prob. victoria local (modelo final): {p_percent:.1f}%
+• Lambda local ajustada (λH): {lh:.2f} goles esperados
+• Lambda visitante ajustada (λA): {la:.2f} goles esperados
+• Lambda local BASE (sin ajustes): {lh_base:.2f}
+• Lambda visitante BASE (sin ajustes): {la_base:.2f}
+• Factor calibración histórica: ×{factor_calibracion:.2f} {'(modelo sobreestima)' if factor_calibracion < 1 else '(modelo subestima)' if factor_calibracion > 1 else '(sin datos aún)'}
 
+── MERCADO DE CUOTAS ──
+• Cuota local: {c_l} → prob. implícita bruta: {(1/c_l)*100:.1f}%
+• Cuota empate: {c_e} → prob. implícita bruta: {(1/c_e)*100:.1f}%
+• Cuota visitante: {c_v} → prob. implícita bruta: {(1/c_v)*100:.1f}%
+• Overround (margen casa): {overround:.4f} ({(overround-1)*100:.2f}% de margen)
+
+── MÉTODO SHIN (1993) vs NORMALIZACIÓN SIMPLE ──
+• Prob. local normalización simple: {prob_market_simple*100:.1f}%
+• Prob. local método Shin: {shin_l*100:.1f}%
+• Prob. empate método Shin: {shin_e*100:.1f}%
+• Prob. visita método Shin: {shin_v*100:.1f}%
+• Parámetro z (info privilegiada): {shin_z:.4f} → nivel {shin_z_txt}
+• Divergencia entre métodos: {divergencia_shin*100:.2f}%
+• Confianza de señal: {shin_confianza}
+• Factor Shin aplicado al edge: ×{shin_factor:.2f}
+• Prob. mercado final (promedio): {prob_market*100:.1f}%
+
+── EDGE Y KELLY ──
+• Edge real (modelo vs mercado): {edge_real*100:.2f}%
+• Edge ajustado (−margen error × factor Shin): {edge_ajustado*100:.2f}%
+• Kelly fraccionado (25%): {round((edge_ajustado/(c_l-1))*0.25*100,2) if edge_ajustado > 0 else 0}%
+• Factor O/U aplicado al stake: ×{ou_factor}
+• Señal Over/Under: {ou_texto}
+• {empate_aviso}
+
+── HISTORIAL H2H (SEDE-CORREGIDO) ──
+• Resultado: {h2h}
+• Victorias local en casa: {home_wins} | Victorias visita fuera: {away_wins} | Total analizados: {total_h2h}
+• Ajuste aplicado: {h2h_ajuste_txt}
+
+── FORMA RECIENTE (ÚLTIMOS 5 PARTIDOS) ──
+• Local: {forma_local_txt} | Factor ataque: ×{forma_local_atk:.3f} | Factor defensa: ×{forma_local_def:.3f}
+• Visita: {forma_visita_txt} | Factor ataque: ×{forma_visita_atk:.3f} | Factor defensa: ×{forma_visita_def:.3f}
+
+── POSICIÓN EN TABLA ──
+• {tabla_texto}
+
+── BAJAS Y NOTICIAS (SERPER) ──
+•{serper_txt}
+• Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
+
+═══════════════════════════════════════
+RESULTADO DEL MODELO
 🎯 PICK: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
+═══════════════════════════════════════
+
+INSTRUCCIONES PARA TU ANÁLISIS:
+1. Si edge ajustado ≤ 0, declara NO BET y explica brevemente la razón principal.
+2. Si edge > 0, redacta un análisis de máximo 130 palabras que integre:
+   a) Qué dice el modelo Poisson vs el mercado (edge real y ajustado).
+   b) Si Shin y la normalización simple coinciden o divergen, y qué implica eso.
+   c) Si la forma reciente y la tabla refuerzan o contradicen el pronóstico estadístico.
+   d) Si el H2H en sede favorece al local o al visitante.
+   e) Si hay bajas relevantes y cómo afectan las lambdas.
+   f) Si el O/U confirma o contradice la apuesta.
+3. Sé directo, técnico y conciso. No repitas los números exactos del header, interprétalos.
 """
 
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
@@ -705,11 +789,13 @@ INSTRUCCIONES:
         prompt_a = (
             f"ERES AUDITOR. Valida este análisis: '{analisis_raw}'\n"
             f"NOTICIAS RECIENTES:\n{contexto_noticias}\n"
-            f"H2H (sede-corregido): {h2h}\n"
-            f"Forma local: {forma_local_txt}\n"
-            f"Forma visita: {forma_visita_txt}\n"
+            f"H2H (sede-corregido): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
+            f"Forma local: {forma_local_txt} (atk ×{forma_local_atk:.3f})\n"
+            f"Forma visita: {forma_visita_txt} (atk ×{forma_visita_atk:.3f})\n"
             f"Tabla: {tabla_texto}\n"
-            f"¿Hay alguna contradicción entre el análisis y los datos? Resumen muy breve."
+            f"Shin z={shin_z:.4f} | Divergencia={divergencia_shin*100:.2f}% | Confianza: {shin_confianza}\n"
+            f"Edge ajustado: {edge_ajustado*100:.2f}% | Stake: {stake}%\n"
+            f"¿Hay alguna contradicción entre el análisis y los datos? Resumen muy breve (máx 60 palabras)."
         )
         auditoria_raw = await ejecutar_ia("auditor", prompt_a)
         footer += f"\n🛡 <b>AUDITOR:</b> <code>{SISTEMA_IA['auditor']['api']}</code>"
@@ -910,9 +996,9 @@ async def cb_fin(call):
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
     help_text = (
-        "🤖 <b>SISTEMA V9.0 PRO</b>\n\n"
+        "🤖 <b>SISTEMA V10.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Odds + Kelly.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Odds + Shin + Kelly.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
