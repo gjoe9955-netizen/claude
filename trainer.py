@@ -176,8 +176,8 @@ def train_spain():
                 valor_h = float(goals_h)
                 valor_a = float(goals_a)
                 partidos_sin_xg += 1
-                equipos_sin_xg.add(f"{home_name} (→ {home_us})")  # DEBUG
-                equipos_sin_xg.add(f"{away_name} (→ {away_us})")  # DEBUG
+                equipos_sin_xg.add(f"{m['utcDate'][:10]} | {home_name} vs {away_name} (FD: {home_us} vs {away_us})")  # DEBUG
+                
 
             goles.append({
                 'home': home_name,
