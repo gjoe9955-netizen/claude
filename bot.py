@@ -198,10 +198,11 @@ async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
                                 if over_price:
                                     prob_over_mercado = 1 / over_price
                                     prob_over_poisson = 0.0
-                                    for x in range(8):
-                                        for y in range(8):
+                                    for x in range(7):
+                                        for y in range(7):
+                                            p = poisson.pmf(x, lambda_h) * poisson.pmf(y, lambda_a) * dixon_coles_tau(x, y, lambda_h, lambda_a)
                                             if x + y > 2:
-                                                prob_over_poisson += poisson.pmf(x, lambda_h) * poisson.pmf(y, lambda_a)
+                                                prob_over_poisson += p
                                     diff = prob_over_poisson - prob_over_mercado
                                     if diff > 0.05:
                                         return 1.2, f"O/U ✅ Confirmación ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
@@ -308,6 +309,29 @@ def calcular_factor_h2h(home_wins, away_wins, total_partidos):
     return factor_lh, factor_la, texto
 
 
+# --- Dixon-Coles: corrección para marcadores bajos ---
+# LaLiga 2025/26 promedio ~2.9 goles — los marcadores 0-0, 1-0, 0-1, 1-1
+# son sistemáticamente subestimados por Poisson puro.
+# rho=-0.13 calibrado empíricamente para ligas de ~2.9 goles/partido.
+DC_RHO = -0.13
+
+def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
+    """
+    Factor de corrección Dixon-Coles solo para marcadores bajos (x+y <= 1).
+    Para el resto devuelve 1.0 (sin efecto).
+    Fórmula original: Dixon & Coles (1997).
+    """
+    if x == 0 and y == 0:
+        return 1.0 - (lh * la * rho)
+    if x == 1 and y == 0:
+        return 1.0 + (la * rho)
+    if x == 0 and y == 1:
+        return 1.0 + (lh * rho)
+    if x == 1 and y == 1:
+        return 1.0 - rho
+    return 1.0
+
+
 # --- Lógica de validación unificada ---
 PICKS_VOID = ["no bet", "no apostar", "no apostar (sin valor)", "sin valor"]
 
@@ -334,7 +358,7 @@ async def handle_pronostico(message):
         await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
     l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V7 (Poisson + H2H + Odds)...")
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V8 (Poisson 7x7 + Dixon-Coles + H2H + Odds)...")
 
     full_data, check_json = await obtener_modelo()
     if not full_data:
@@ -370,11 +394,13 @@ async def handle_pronostico(message):
     lh = lh_base * factor_lh_h2h
     la = la_base * factor_la_h2h
 
-    # --- PASO 3: Probabilidad Poisson con lambdas ajustadas ---
+    # --- PASO 3: Probabilidad Poisson 7x7 + Dixon-Coles ---
     prob_poisson = 0
-    for x in range(6):
-        for y in range(6):
-            if x > y: prob_poisson += poisson.pmf(x, lh) * poisson.pmf(y, la)
+    for x in range(7):
+        for y in range(7):
+            p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
+            if x > y:
+                prob_poisson += p
 
     # --- PASO 4: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
@@ -444,8 +470,8 @@ async def handle_pronostico(message):
     h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste"
 
     header = (
-        f"<b>🛠 REPORTE V7:</b> {'✅' if check_odds else '❌'} Mercado | "
-        f"{'✅' if check_json else '❌'} Poisson ({p_percent:.1f}%) | "
+        f"<b>🛠 REPORTE V8:</b> {'✅' if check_odds else '❌'} Mercado | "
+        f"{'✅' if check_json else '❌'} Poisson 7x7+DC ({p_percent:.1f}%) | "
         f"{'✅' if check_h2h else '❌'} H2H\n"
         f"<b>⚽ Lambdas:</b> λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f})\n"
         f"<b>🔄 H2H:</b> {h2h_texto} → {h2h_ajuste_txt}\n"
@@ -686,9 +712,9 @@ async def cb_fin(call):
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
     help_text = (
-        "🤖 <b>SISTEMA V7.0 PRO</b>\n\n"
+        "🤖 <b>SISTEMA V8.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Análisis Poisson + H2H + Odds + Kelly.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H + Odds + Kelly.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
