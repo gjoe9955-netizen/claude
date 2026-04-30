@@ -55,9 +55,18 @@ async def obtener_modelo():
     return _MODELO_CACHE["data"], False
 
 # --- Función de Búsqueda de Última Hora (Serper) ---
+# MEJORA 5: Serper ahora devuelve también un factor de penalización numérico
+PALABRAS_BAJA_LOCAL = ["baja", "lesión", "lesionado", "no jugará", "ausente", "descartado", "out"]
+PALABRAS_BAJA_VISITA = PALABRAS_BAJA_LOCAL  # misma lista
+
 async def obtener_contexto_real(l_q, v_q):
+    """
+    Devuelve (texto_noticias, factor_penalty_local, factor_penalty_visita).
+    - factor_penalty_local: 0.95 si se detectan bajas del equipo local, 1.0 si no.
+    - factor_penalty_visita: 0.95 si se detectan bajas del visitante, 1.0 si no.
+    """
     if not SERPER_KEY:
-        return "No hay API Key de Serper configurada."
+        return "No hay API Key de Serper configurada.", 1.0, 1.0
     
     url = "https://google.serper.dev/search"
     query = f'(site:jornadaperfecta.com OR site:futbolfantasy.com) "{l_q}" "{v_q}" alineación'
@@ -77,12 +86,31 @@ async def obtener_contexto_real(l_q, v_q):
         r = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=10)
         res = r.json().get('organic', [])
         contexto = ""
+        penalty_local = 1.0
+        penalty_visita = 1.0
+
         for item in res[:3]:
+            snippet = item.get('snippet', '').lower()
+            titulo = item.get('title', '').lower()
+            texto_completo = snippet + " " + titulo
             contexto += f"- {item['title']}: {item['snippet']}\n"
-        return contexto if contexto else "No se encontraron noticias recientes."
+
+            # Detectar menciones de bajas del local
+            if l_q.lower() in texto_completo:
+                if any(p in texto_completo for p in PALABRAS_BAJA_LOCAL):
+                    penalty_local = 0.95
+
+            # Detectar menciones de bajas del visitante
+            if v_q.lower() in texto_completo:
+                if any(p in texto_completo for p in PALABRAS_BAJA_VISITA):
+                    penalty_visita = 0.95
+
+        contexto_final = contexto if contexto else "No se encontraron noticias recientes."
+        return contexto_final, penalty_local, penalty_visita
+
     except Exception as e:
         logging.error(f"Error Serper: {e}")
-        return "Error consultando noticias de última hora."
+        return "Error consultando noticias de última hora.", 1.0, 1.0
 
 # --- Persistencia en GitHub ---
 async def guardar_en_github(nuevo_registro=None, historial_completo=None):
@@ -242,8 +270,15 @@ async def api_football_call(endpoint):
         return r.json() if r.status_code == 200 else None
     except: return None
 
+# --- MEJORA 3: H2H filtrado por sede ---
 async def obtener_h2h_directo(id_l, id_v):
-    if not id_l or not id_v: 
+    """
+    Devuelve el H2H filtrado por sede:
+    - Solo cuenta victorias del LOCAL cuando id_l era HOME_TEAM
+    - Solo cuenta victorias del VISITANTE cuando id_v era HOME_TEAM
+    Esto elimina el sesgo de contar victorias fuera de casa como si fueran en casa.
+    """
+    if not id_l or not id_v:
         return "H2H: Sin IDs válidos.", False, 0, 0, 0
     
     headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
@@ -256,46 +291,43 @@ async def obtener_h2h_directo(id_l, id_v):
                 l, v, e = 0, 0, 0
                 for m in matches[:5]:
                     w = m['score']['winner']
-                    if w == 'HOME_TEAM': l += 1
-                    elif w == 'AWAY_TEAM': v += 1
-                    else: e += 1
+                    home_id = m['homeTeam']['id']
+                    # Solo contamos si id_l fue realmente local en ese partido
+                    if home_id == id_l:
+                        if w == 'HOME_TEAM': l += 1
+                        elif w == 'AWAY_TEAM': v += 1
+                        else: e += 1
+                    else:
+                        # id_l fue visitante: invertimos la perspectiva
+                        if w == 'HOME_TEAM': v += 1
+                        elif w == 'AWAY_TEAM': l += 1
+                        else: e += 1
                 total = l + v + e
-                return f"Local {l} | Visitante {v} | Empates {e}", True, l, v, total
+                return f"Local {l} | Visitante {v} | Empates {e} (sede-ajustado)", True, l, v, total
         return "H2H: Sin datos directos.", False, 0, 0, 0
-    except: 
+    except:
         return "H2H: Error API.", False, 0, 0, 0
 
 
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
     """
     Convierte el historial H2H en un factor de ajuste para las lambdas de Poisson.
-    
-    Lógica:
-    - Si el local ganó más del 60% de los H2H → lh sube hasta 8%, la baja hasta 8%
-    - Si el visitante ganó más del 60% → lh baja hasta 8%, la sube hasta 8%
-    - Si está equilibrado → sin ajuste (factor = 1.0)
-    - Peso del H2H: 15% del cálculo total (conservador, no domina sobre Poisson)
-    
-    Devuelve: (factor_lh, factor_la, texto_explicativo)
+    Peso máximo ±8%, solo actúa si un equipo ganó >60% de los H2H.
     """
     if total_partidos < 3:
         return 1.0, 1.0, "H2H: Insuficientes datos"
 
     tasa_local = home_wins / total_partidos
     tasa_visita = away_wins / total_partidos
-
-    # Peso máximo del ajuste H2H: ±8%
     MAX_AJUSTE = 0.08
 
     if tasa_local > 0.60:
-        # Local domina históricamente
-        intensidad = min((tasa_local - 0.60) / 0.40, 1.0)  # escala de 0 a 1
+        intensidad = min((tasa_local - 0.60) / 0.40, 1.0)
         ajuste = MAX_AJUSTE * intensidad
         factor_lh = 1.0 + ajuste
         factor_la = 1.0 - ajuste
         texto = f"H2H 🏠 Dominio local ({tasa_local*100:.0f}%, +{ajuste*100:.1f}% lh)"
     elif tasa_visita > 0.60:
-        # Visitante domina históricamente
         intensidad = min((tasa_visita - 0.60) / 0.40, 1.0)
         ajuste = MAX_AJUSTE * intensidad
         factor_lh = 1.0 - ajuste
@@ -309,18 +341,126 @@ def calcular_factor_h2h(home_wins, away_wins, total_partidos):
     return factor_lh, factor_la, texto
 
 
+# --- MEJORA 1: Forma reciente (últimos 5 partidos) ---
+async def obtener_forma_reciente(team_id):
+    """
+    Consulta los últimos 5 partidos FINISHED del equipo.
+    Devuelve (factor_lh, factor_la, texto) donde:
+    - 5W → factor_ataque=+10%, factor_defensa=-10%
+    - 5L → factor_ataque=-10%, factor_defensa=+10%
+    - Escala proporcional entre ambos extremos.
+    El factor se aplica sobre las lambdas del equipo correspondiente.
+    """
+    if not team_id:
+        return 1.0, 1.0, "Forma: Sin ID"
+
+    headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
+    try:
+        url = f"https://api.football-data.org/v4/teams/{team_id}/matches?status=FINISHED&limit=5"
+        r = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+        if r.status_code != 200:
+            return 1.0, 1.0, "Forma: Sin datos"
+
+        matches = r.json().get('matches', [])
+        if not matches:
+            return 1.0, 1.0, "Forma: Sin partidos"
+
+        puntos = 0
+        for m in matches[:5]:
+            w = m['score']['winner']
+            home_id = m['homeTeam']['id']
+            es_local = (home_id == team_id)
+            if (es_local and w == 'HOME_TEAM') or (not es_local and w == 'AWAY_TEAM'):
+                puntos += 3
+            elif w == 'DRAW':
+                puntos += 1
+            # derrota: 0 puntos
+
+        # Escala: 0pts (forma 0.0) → 15pts (forma 1.0)
+        # Zona neutra 5-10pts: sin ajuste
+        MAX_AJUSTE = 0.10
+        forma_norm = puntos / 15.0  # 0.0 a 1.0
+
+        if forma_norm > 0.67:  # >10 pts: buen momento
+            intensidad = (forma_norm - 0.67) / 0.33
+            ajuste = MAX_AJUSTE * intensidad
+            factor_ataque = 1.0 + ajuste
+            factor_defensa = 1.0 - ajuste
+            simbolo = "🔥"
+        elif forma_norm < 0.33:  # <5 pts: mal momento
+            intensidad = (0.33 - forma_norm) / 0.33
+            ajuste = MAX_AJUSTE * intensidad
+            factor_ataque = 1.0 - ajuste
+            factor_defensa = 1.0 + ajuste
+            simbolo = "❄️"
+        else:
+            factor_ataque = 1.0
+            factor_defensa = 1.0
+            simbolo = "➡️"
+
+        texto = f"Forma {simbolo} {puntos}pts/15 (factor atk ×{factor_ataque:.3f})"
+        return factor_ataque, factor_defensa, texto
+
+    except Exception as e:
+        logging.error(f"Error forma reciente team {team_id}: {e}")
+        return 1.0, 1.0, "Forma: Error API"
+
+
+# --- MEJORA 2: Posición en tabla ---
+async def obtener_posiciones_tabla():
+    """
+    Devuelve dict {team_id: {pos, puntos}} para calcular diferencia de posición.
+    Usa el endpoint de standings de Football-Data.
+    """
+    try:
+        data = await api_football_call("standings")
+        if not data:
+            return {}
+        tabla = {}
+        for t in data['standings'][0]['table']:
+            tabla[t['team']['id']] = {
+                'pos': t['position'],
+                'puntos': t['points'],
+                'nombre': t['team']['name']
+            }
+        return tabla
+    except Exception as e:
+        logging.error(f"Error tabla: {e}")
+        return {}
+
+
+def calcular_factor_tabla(pos_local, pos_visita, pts_local, pts_visita):
+    """
+    Ajusta lambdas según diferencia de posición en tabla.
+    - Diferencia >6 posiciones a favor del local: lh sube hasta 6%
+    - Diferencia >6 posiciones a favor del visitante: la sube hasta 6%
+    - Peso conservador: máx ±6% para no dominar sobre Poisson.
+    """
+    MAX_AJUSTE = 0.06
+    diff_pos = pos_visita - pos_local  # positivo = local mejor posicionado
+
+    if abs(diff_pos) < 6:
+        return 1.0, 1.0, f"Tabla ⚖️ Diferencia leve ({pos_local}° vs {pos_visita}°, {pts_local}pts vs {pts_visita}pts)"
+
+    intensidad = min((abs(diff_pos) - 6) / 14, 1.0)  # escala 6-20 diff → 0-1
+    ajuste = MAX_AJUSTE * intensidad
+
+    if diff_pos > 0:  # local mejor posicionado
+        factor_lh = 1.0 + ajuste
+        factor_la = 1.0 - ajuste
+        texto = f"Tabla 📈 Local superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% lh)"
+    else:  # visitante mejor posicionado
+        factor_lh = 1.0 - ajuste
+        factor_la = 1.0 + ajuste
+        texto = f"Tabla 📉 Visita superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% la)"
+
+    return factor_lh, factor_la, texto
+
+
 # --- Dixon-Coles: corrección para marcadores bajos ---
-# LaLiga 2025/26 promedio ~2.9 goles — los marcadores 0-0, 1-0, 0-1, 1-1
-# son sistemáticamente subestimados por Poisson puro.
-# rho=-0.13 calibrado empíricamente para ligas de ~2.9 goles/partido.
 DC_RHO = -0.13
 
 def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
-    """
-    Factor de corrección Dixon-Coles solo para marcadores bajos (x+y <= 1).
-    Para el resto devuelve 1.0 (sin efecto).
-    Fórmula original: Dixon & Coles (1997).
-    """
     if x == 0 and y == 0:
         return 1.0 - (lh * la * rho)
     if x == 1 and y == 0:
@@ -347,7 +487,7 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
         return "✅ WIN"
     return "❌ LOSS"
 
-# --- Comando Principal: Pronóstico V7 con H2H matemático ---
+# --- Comando Principal: Pronóstico V9 ---
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
     if not SISTEMA_IA["estratega"]["nodo"]:
@@ -358,18 +498,18 @@ async def handle_pronostico(message):
         await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
     l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V8 (Poisson 7x7 + Dixon-Coles + H2H + Odds)...")
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V9 (Poisson + DC + H2H-Sede + Forma + Tabla + Odds)...")
 
     full_data, check_json = await obtener_modelo()
     if not full_data:
         await bot.edit_message_text("❌ Error al cargar el JSON del servidor.", message.chat.id, msg_espera.message_id); return
 
-    # Tareas en paralelo
+    # Tareas en paralelo: odds, noticias, calibración
     task_odds = obtener_datos_mercado(l_q)
     task_news = obtener_contexto_real(l_q, v_q)
     task_calib = obtener_factor_calibracion()
     c_l, c_e, c_v, check_odds = await task_odds
-    contexto_noticias = await task_news
+    contexto_noticias, penalty_local, penalty_visita = await task_news
     factor_calibracion = await task_calib
 
     liga = next(iter(full_data))
@@ -380,21 +520,48 @@ async def handle_pronostico(message):
         await bot.edit_message_text("❌ Equipo no encontrado en el JSON.", message.chat.id, msg_espera.message_id); return
 
     l_s, v_s = full_data[liga]['teams'][m_l], full_data[liga]['teams'][m_v]
+    id_l = l_s.get("id_api")
+    id_v = v_s.get("id_api")
 
-    # H2H — ahora devuelve también total_partidos
-    h2h, check_h2h, home_wins, away_wins, total_h2h = await obtener_h2h_directo(l_s.get("id_api"), v_s.get("id_api"))
+    # Todas las consultas externas en paralelo
+    h2h_task = obtener_h2h_directo(id_l, id_v)
+    forma_local_task = obtener_forma_reciente(id_l)
+    forma_visita_task = obtener_forma_reciente(id_v)
+    tabla_task = obtener_posiciones_tabla()
+
+    h2h, check_h2h, home_wins, away_wins, total_h2h = await h2h_task
+    forma_local_atk, forma_local_def, forma_local_txt = await forma_local_task
+    forma_visita_atk, forma_visita_def, forma_visita_txt = await forma_visita_task
+    tabla = await tabla_task
 
     # --- PASO 1: Lambdas base desde Poisson ---
     avg = full_data[liga]['averages']
     lh_base = l_s['att_h'] * v_s['def_a'] * avg['league_home']
     la_base = v_s['att_a'] * l_s['def_h'] * avg['league_away']
 
-    # --- PASO 2: Ajuste H2H sobre las lambdas (±8% máx, peso conservador) ---
+    # --- PASO 2: Ajuste H2H (sede-corregido) ---
     factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
-    lh = lh_base * factor_lh_h2h
-    la = la_base * factor_la_h2h
 
-    # --- PASO 3: Probabilidad Poisson 7x7 + Dixon-Coles ---
+    # --- PASO 3: Ajuste forma reciente ---
+    # Forma local afecta lh (ataque) y la resistencia defensiva que enfrenta el visitante
+    # Forma visita afecta la (ataque visitante) y la resistencia defensiva que enfrenta el local
+    factor_lh_forma = forma_local_atk      # local en buen momento ataca mejor
+    factor_la_forma = forma_visita_atk     # visita en buen momento ataca mejor
+
+    # --- PASO 4: Ajuste tabla ---
+    factor_lh_tabla, factor_la_tabla, tabla_texto = 1.0, 1.0, "Tabla: Sin datos"
+    if tabla and id_l in tabla and id_v in tabla:
+        t_l = tabla[id_l]
+        t_v = tabla[id_v]
+        factor_lh_tabla, factor_la_tabla, tabla_texto = calcular_factor_tabla(
+            t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
+        )
+
+    # --- PASO 5: Combinar todos los factores sobre las lambdas ---
+    lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * penalty_local
+    la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * penalty_visita
+
+    # --- PASO 6: Probabilidad Poisson 7x7 + Dixon-Coles ---
     prob_poisson = 0
     for x in range(7):
         for y in range(7):
@@ -402,19 +569,18 @@ async def handle_pronostico(message):
             if x > y:
                 prob_poisson += p
 
-    # --- PASO 4: Calibración histórica ---
+    # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 5: Mezcla final Poisson(85%) + Mercado(15%) ---
-    # Aumentamos peso del mercado de 10% a 15% para mayor realismo
+    # --- PASO 8: Mezcla final Poisson(85%) + Mercado(15%) ---
     prob_market = 1 / c_l
     p_win = (prob_poisson_calibrado * 0.85) + (prob_market * 0.15)
     p_percent = p_win * 100
 
-    # --- PASO 6: Over/Under como confirmación del stake ---
+    # --- PASO 9: Over/Under como confirmación del stake ---
     ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
-    # --- PASO 7: Edge y Kelly ---
+    # --- PASO 10: Edge y Kelly ---
     edge_real = p_win - prob_market
     margen_error = 0.01
     edge_ajustado = edge_real - margen_error
@@ -422,6 +588,14 @@ async def handle_pronostico(message):
     # Filtro cuotas trampa
     if 1.90 <= c_l <= 2.20 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
+
+    # MEJORA 6: Cuota del empate como filtro adicional
+    # Si c_e < 3.0, el mercado dice partido muy parejo → reducir edge un 20%
+    if c_e < 3.0 and edge_ajustado > 0:
+        edge_ajustado *= 0.80
+        empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge reducido 20%"
+    else:
+        empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
 
     if edge_ajustado <= 0:
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
@@ -465,17 +639,25 @@ async def handle_pronostico(message):
         COOLDOWN[clave_partido] = ahora
         asyncio.create_task(task_github())
 
-    # --- Header del reporte ---
+    # --- Construir textos resumen de ajustes ---
     calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos)"
-    h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste"
+    h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
+    serper_txt = ""
+    if penalty_local < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
+    if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
+    if not serper_txt: serper_txt = " Sin bajas detectadas"
 
     header = (
-        f"<b>🛠 REPORTE V8:</b> {'✅' if check_odds else '❌'} Mercado | "
+        f"<b>🛠 REPORTE V9:</b> {'✅' if check_odds else '❌'} Mercado | "
         f"{'✅' if check_json else '❌'} Poisson 7x7+DC ({p_percent:.1f}%) | "
         f"{'✅' if check_h2h else '❌'} H2H\n"
         f"<b>⚽ Lambdas:</b> λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f})\n"
-        f"<b>🔄 H2H:</b> {h2h_texto} → {h2h_ajuste_txt}\n"
+        f"<b>🔄 H2H (sede):</b> {h2h_texto} → {h2h_ajuste_txt}\n"
+        f"<b>📅 Forma:</b> {forma_local_txt} | {forma_visita_txt}\n"
+        f"<b>🏆 Tabla:</b> {tabla_texto}\n"
+        f"<b>📰 Serper:</b>{serper_txt}\n"
         f"<b>📊 Calibración:</b> ×{calib_txt} | {ou_texto}\n"
+        f"<b>🎲 Empate:</b> {empate_aviso}\n"
         f"{'—'*20}\n"
     )
 
@@ -487,15 +669,21 @@ DATOS MATEMÁTICOS:
 - Prob. victoria local (modelo): {p_percent:.1f}%
 - Cuota mercado local: {c_l} (implica {prob_market*100:.1f}%)
 - Edge ajustado: {edge_ajustado*100:.2f}%
-- H2H últimos partidos: {h2h} → ajuste aplicado: {h2h_ajuste_txt}
+- H2H últimos partidos (sede-corregido): {h2h} → ajuste: {h2h_ajuste_txt}
+- Forma reciente local: {forma_local_txt}
+- Forma reciente visita: {forma_visita_txt}
+- Posición en tabla: {tabla_texto}
+- Bajas detectadas (Serper):{serper_txt}
+- Cuota empate: {c_e:.2f} ({empate_aviso})
 - Señal O/U: {ou_texto}
 - Lambda local ajustada: {lh:.2f} goles esperados
 - Lambda visita ajustada: {la:.2f} goles esperados
 
 INSTRUCCIONES:
 1. Si edge <= 0, di NO BET y explica brevemente por qué no hay valor.
-2. Si edge > 0, explica en máximo 100 palabras por qué hay valor combinando Poisson, H2H y mercado.
-3. Menciona si el H2H refuerza o contradice el pronóstico estadístico.
+2. Si edge > 0, explica en máximo 120 palabras por qué hay valor combinando Poisson, forma reciente, H2H, tabla y mercado.
+3. Menciona si la forma reciente y la tabla refuerzan o contradicen el pronóstico estadístico.
+4. Si hay bajas detectadas, pondera su impacto.
 
 🎯 PICK: {pick_final}
 📈 NIVEL: {nivel}
@@ -510,8 +698,11 @@ INSTRUCCIONES:
         prompt_a = (
             f"ERES AUDITOR. Valida este análisis: '{analisis_raw}'\n"
             f"NOTICIAS RECIENTES:\n{contexto_noticias}\n"
-            f"H2H: {h2h}\n"
-            f"¿Hay alguna contradicción entre el análisis y las noticias o el H2H? Resumen muy breve."
+            f"H2H (sede-corregido): {h2h}\n"
+            f"Forma local: {forma_local_txt}\n"
+            f"Forma visita: {forma_visita_txt}\n"
+            f"Tabla: {tabla_texto}\n"
+            f"¿Hay alguna contradicción entre el análisis y los datos? Resumen muy breve."
         )
         auditoria_raw = await ejecutar_ia("auditor", prompt_a)
         footer += f"\n🛡 <b>AUDITOR:</b> <code>{SISTEMA_IA['auditor']['api']}</code>"
@@ -712,9 +903,9 @@ async def cb_fin(call):
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
     help_text = (
-        "🤖 <b>SISTEMA V8.0 PRO</b>\n\n"
+        "🤖 <b>SISTEMA V9.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H + Odds + Kelly.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Odds + Kelly.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
