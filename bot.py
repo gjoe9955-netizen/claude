@@ -504,35 +504,37 @@ async def handle_pronostico(message):
     if not full_data:
         await bot.edit_message_text("❌ Error al cargar el JSON del servidor.", message.chat.id, msg_espera.message_id); return
 
-    # Tareas en paralelo: odds, noticias, calibración
-    task_odds = obtener_datos_mercado(l_q)
-    task_news = obtener_contexto_real(l_q, v_q)
-    task_calib = obtener_factor_calibracion()
-    c_l, c_e, c_v, check_odds = await task_odds
-    contexto_noticias, penalty_local, penalty_visita = await task_news
-    factor_calibracion = await task_calib
-
     liga = next(iter(full_data))
     m_l = next((t for t in full_data[liga]['teams'] if t.lower() in l_q.lower() or l_q.lower() in t.lower()), None)
     m_v = next((t for t in full_data[liga]['teams'] if t.lower() in v_q.lower() or v_q.lower() in t.lower()), None)
-    
+
     if not m_l or not m_v:
         await bot.edit_message_text("❌ Equipo no encontrado en el JSON.", message.chat.id, msg_espera.message_id); return
 
     l_s, v_s = full_data[liga]['teams'][m_l], full_data[liga]['teams'][m_v]
     id_l = l_s.get("id_api")
     id_v = v_s.get("id_api")
+    logging.info(f"[H2H] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
 
-    # Todas las consultas externas en paralelo
-    h2h_task = obtener_h2h_directo(id_l, id_v)
-    forma_local_task = obtener_forma_reciente(id_l)
-    forma_visita_task = obtener_forma_reciente(id_v)
-    tabla_task = obtener_posiciones_tabla()
-
-    h2h, check_h2h, home_wins, away_wins, total_h2h = await h2h_task
-    forma_local_atk, forma_local_def, forma_local_txt = await forma_local_task
-    forma_visita_atk, forma_visita_def, forma_visita_txt = await forma_visita_task
-    tabla = await tabla_task
+    # Todas las consultas externas EN PARALELO con asyncio.gather
+    (
+        (c_l, c_e, c_v, check_odds),
+        (contexto_noticias, penalty_local, penalty_visita),
+        factor_calibracion,
+        (h2h, check_h2h, home_wins, away_wins, total_h2h),
+        (forma_local_atk, forma_local_def, forma_local_txt),
+        (forma_visita_atk, forma_visita_def, forma_visita_txt),
+        tabla
+    ) = await asyncio.gather(
+        obtener_datos_mercado(l_q),
+        obtener_contexto_real(l_q, v_q),
+        obtener_factor_calibracion(),
+        obtener_h2h_directo(id_l, id_v),
+        obtener_forma_reciente(id_l),
+        obtener_forma_reciente(id_v),
+        obtener_posiciones_tabla()
+    )
+    logging.info(f"[H2H] resultado={h2h} | check={check_h2h} | wins_l={home_wins} wins_v={away_wins} total={total_h2h}")
 
     # --- PASO 1: Lambdas base desde Poisson ---
     avg = full_data[liga]['averages']
