@@ -24,7 +24,6 @@ XG_WEIGHT = 0.6
 
 # ===========================================================================
 # UNDERSTAT — librería oficial (pip install understat aiohttp)
-# Usa aiohttp internamente y maneja correctamente el scraping del HTML.
 # ===========================================================================
 
 async def _fetch_xg_async(temporada):
@@ -150,6 +149,7 @@ def train_spain():
         team_ids = {}
         partidos_con_xg = 0
         partidos_sin_xg = 0
+        equipos_sin_xg = set()  # DEBUG
 
         for m in matches:
             if not (m.get('score') and m['score'].get('fullTime')):
@@ -176,6 +176,8 @@ def train_spain():
                 valor_h = float(goals_h)
                 valor_a = float(goals_a)
                 partidos_sin_xg += 1
+                equipos_sin_xg.add(f"{home_name} (→ {home_us})")  # DEBUG
+                equipos_sin_xg.add(f"{away_name} (→ {away_us})")  # DEBUG
 
             goles.append({
                 'home': home_name,
@@ -184,6 +186,12 @@ def train_spain():
                 'goals_a': valor_a,
                 'date': m['utcDate']
             })
+
+        # DEBUG — mostrar equipos sin xG para ajustar mapeo
+        if equipos_sin_xg:
+            print(f"   🔍 Equipos sin xG encontrado:")
+            for e in sorted(equipos_sin_xg):
+                print(f"      - {e}")
 
         df = pd.DataFrame(goles)
         df['date'] = pd.to_datetime(df['date'])
