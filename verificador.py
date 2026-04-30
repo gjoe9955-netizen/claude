@@ -43,7 +43,9 @@ def actualizar_historial():
             return
             
         file_data = r_gh.json()
-        historial = json.loads(base64.b64decode(file_data['content']).decode('utf-8'))
+        # La API de GitHub embebe \n cada 60 chars en el campo content — limpiar antes de decodificar
+        contenido_raw = file_data['content'].replace('\n', '')
+        historial = json.loads(base64.b64decode(contenido_raw).decode('utf-8'))
         
         # 2. Obtener resultados reales
         partidos_api = obtener_resultados_recientes()
