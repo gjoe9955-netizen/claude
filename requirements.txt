@@ -4,3 +4,5 @@ pandas
 numpy
 scipy
 python-dotenv
+aiohttp
+openai
