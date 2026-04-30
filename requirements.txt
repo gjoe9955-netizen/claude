@@ -4,6 +4,6 @@ pandas
 numpy
 scipy
 python-dotenv
-aiohttp
 openai
-understat 
+aiohttp>=3.9.0
+understat>=0.1.14
