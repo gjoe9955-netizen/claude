@@ -6,4 +6,4 @@ scipy
 python-dotenv
 openai
 aiohttp>=3.9.0
-understat>=0.1.14 --no-deps
+understat>=0.1.14
