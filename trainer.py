@@ -1,15 +1,17 @@
 import os
-import re
+import asyncio
+import aiohttp
 import requests
 import json
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from understat import Understat
 
 # ===========================================================================
 # Fuentes de datos:
 #   - Football-Data.org → estructura de partidos, IDs de equipos, resultados
-#   - Understat.com     → xG gratis via scraping HTML (sin API key)
+#   - Understat.com     → xG gratis via librería understat (aiohttp)
 # ===========================================================================
 
 API_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
@@ -21,17 +23,20 @@ XG_WEIGHT = 0.6
 
 
 # ===========================================================================
-# UNDERSTAT — SCRAPING HTML
-#
-# Understat incrusta los datos de partidos directamente en el HTML de la
-# página de cada liga como una variable JS:
-#   var datesData = JSON.parse('...')
-# Extraemos ese JSON con regex, sin necesidad de librerías extra.
+# UNDERSTAT — librería oficial (pip install understat aiohttp)
+# Usa aiohttp internamente y maneja correctamente el scraping del HTML.
 # ===========================================================================
+
+async def _fetch_xg_async(temporada):
+    async with aiohttp.ClientSession() as session:
+        understat = Understat(session)
+        partidos = await understat.get_league_results("La_liga", temporada)
+    return partidos
+
 
 def obtener_xg_understat():
     """
-    Obtiene xG de LaLiga scrapeando el HTML de Understat.
+    Obtiene xG de LaLiga usando la librería understat.
     Devuelve dict: {(home_norm, away_norm): (xg_h, xg_a)}
     """
     xg_map = {}
@@ -40,45 +45,16 @@ def obtener_xg_understat():
     mes = datetime.now().month
     temporada = anio - 1 if mes < 8 else anio
 
-    url = f"https://understat.com/league/La_liga/{temporada}"
-
-    headers_us = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://understat.com/",
-    }
-
     try:
-        r = requests.get(url, headers=headers_us, timeout=30)
-
-        if r.status_code != 200:
-            print(f"   ⚠️  Understat HTML {r.status_code}. Solo goles reales.")
-            return xg_map
-
-        # Extraer el JSON embebido en el JS de la página
-        match = re.search(r"var datesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
-        if not match:
-            print("   ⚠️  No se encontró datesData en Understat. Solo goles reales.")
-            return xg_map
-
-        # Decodificar el string escapado
-        raw = match.group(1)
-        raw = raw.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
-        partidos = json.loads(raw)
+        partidos = asyncio.run(_fetch_xg_async(temporada))
 
         for p in partidos:
-            if not p.get('isResult'):
-                continue
             xg_data = p.get('xG', {})
             if not xg_data:
                 continue
             try:
-                xg_h = float(xg_data.get('h', 0) or 0)
-                xg_a = float(xg_data.get('a', 0) or 0)
+                xg_h = float(xg_data.get('h') or 0)
+                xg_a = float(xg_data.get('a') or 0)
             except (TypeError, ValueError):
                 continue
             if not (0 <= xg_h <= 8 and 0 <= xg_a <= 8):
@@ -88,7 +64,7 @@ def obtener_xg_understat():
             if home and away:
                 xg_map[(home, away)] = (xg_h, xg_a)
 
-        print(f"   ✅ Understat HTML ({temporada}): {len(xg_map)} partidos con xG.")
+        print(f"   ✅ Understat ({temporada}): {len(xg_map)} partidos con xG.")
 
     except Exception as e:
         print(f"   ⚠️  Error Understat: {e}. Solo goles reales.")
@@ -148,7 +124,7 @@ def train_spain():
     try:
         print(f"Consultando LaLiga | λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}...")
 
-        print("Descargando xG desde Understat (scraping HTML)...")
+        print("Descargando xG desde Understat...")
         xg_understat = obtener_xg_understat()
 
         response = requests.get(URL, headers=HEADERS, timeout=15)
