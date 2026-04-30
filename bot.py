@@ -574,9 +574,13 @@ async def handle_pronostico(message):
     # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 8: Mezcla final Poisson(85%) + Mercado(15%) ---
-    prob_market = 1 / c_l
-    p_win = (prob_poisson_calibrado * 0.85) + (prob_market * 0.15)
+    # --- PASO 8: Normalizar odds (quitar margen de la casa) ---
+    # Sin normalizar, prob_market esta inflada 3-6% por el overround
+    overround = (1/c_l) + (1/c_e) + (1/c_v)
+    prob_market = (1 / c_l) / overround  # probabilidad justa sin margen
+
+    # Mezcla final Poisson(90%) + Mercado normalizado(10%)
+    p_win = (prob_poisson_calibrado * 0.90) + (prob_market * 0.10)
     p_percent = p_win * 100
 
     # --- PASO 9: Over/Under como confirmación del stake ---
@@ -584,11 +588,11 @@ async def handle_pronostico(message):
 
     # --- PASO 10: Edge y Kelly ---
     edge_real = p_win - prob_market
-    margen_error = 0.01
+    margen_error = 0.005  # reducido de 1% a 0.5%
     edge_ajustado = edge_real - margen_error
 
-    # Filtro cuotas trampa
-    if 1.90 <= c_l <= 2.20 and edge_ajustado < 0.02:
+    # Filtro cuotas trampa: solo actua en cuotas muy bajas
+    if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
 
     # MEJORA 6: Cuota del empate como filtro adicional
@@ -658,6 +662,7 @@ async def handle_pronostico(message):
         f"<b>📅 Forma:</b> {forma_local_txt} | {forma_visita_txt}\n"
         f"<b>🏆 Tabla:</b> {tabla_texto}\n"
         f"<b>📰 Serper:</b>{serper_txt}\n"
+        f"<b>📊 Mercado:</b> c_l={c_l} | overround={overround:.3f} | prob_justa={prob_market*100:.1f}%\n"
         f"<b>📊 Calibración:</b> ×{calib_txt} | {ou_texto}\n"
         f"<b>🎲 Empate:</b> {empate_aviso}\n"
         f"{'—'*20}\n"
