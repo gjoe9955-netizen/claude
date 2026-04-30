@@ -78,9 +78,11 @@ def obtener_xg_understat():
 # ===========================================================================
 
 NOMBRE_FD_A_US = {
+    # --- Nombres actuales Football-Data 2025/26 ---
     "real madrid cf"                : "real madrid",
     "fc barcelona"                  : "barcelona",
-    "atletico de madrid"            : "atletico madrid",
+    "club atlético de madrid"       : "atletico madrid",
+    "club atletico de madrid"       : "atletico madrid",
     "athletic club"                 : "athletic club",
     "real sociedad de fútbol"       : "real sociedad",
     "real sociedad de futbol"       : "real sociedad",
@@ -91,19 +93,26 @@ NOMBRE_FD_A_US = {
     "valencia cf"                   : "valencia",
     "rayo vallecano de madrid"      : "rayo vallecano",
     "getafe cf"                     : "getafe",
-    "ud girona fc"                  : "girona",
+    "girona fc"                     : "girona",
     "deportivo alavés"              : "alaves",
     "deportivo alaves"              : "alaves",
     "ca osasuna"                    : "osasuna",
     "rc celta de vigo"              : "celta vigo",
-    "ud almería"                    : "almeria",
-    "ud almeria"                    : "almeria",
     "rcd mallorca"                  : "mallorca",
+    "rcd espanyol de barcelona"     : "espanyol",
+    "ud las palmas"                 : "las palmas",
+    "real valladolid cf"            : "valladolid",
     "cd leganés"                    : "leganes",
     "cd leganes"                    : "leganes",
-    "real valladolid cf"            : "valladolid",
+    "elche cf"                      : "elche",
+    "levante ud"                    : "levante",
+    "real oviedo"                   : "oviedo",
+    # --- Aliases temporadas anteriores ---
+    "atletico de madrid"            : "atletico madrid",
+    "ud girona fc"                  : "girona",
+    "ud almería"                    : "almeria",
+    "ud almeria"                    : "almeria",
     "cd espanyol de barcelona"      : "espanyol",
-    "ud las palmas"                 : "las palmas",
     "real racing club de santander" : "racing santander",
 }
 
