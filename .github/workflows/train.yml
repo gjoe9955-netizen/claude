@@ -1,0 +1,44 @@
+name: Entrenador Poisson España
+
+on:
+  schedule:
+    - cron: '0 */12 * * *' # Se ejecuta cada 12 horas automáticamente
+  workflow_dispatch:      # Permite ejecución manual
+
+permissions:
+  contents: write         # Necesario para guardar el modelo_poisson.json con los IDs
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BOT_REPO_TOKEN }}
+
+      - name: Configurar Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Instalar dependencias
+        run: |
+          pip install requests pandas numpy scipy
+
+      - name: Ejecutar el script Trainer
+        env:
+          FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
+        run: python trainer.py
+
+      - name: Subir cambios al repositorio
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          # Añadimos un chequeo para asegurar que el archivo existe antes de añadirlo
+          if [ -f modelo_poisson.json ]; then
+            git add modelo_poisson.json
+            git diff --quiet && git diff --staged --quiet || (git commit -m "Actualización automática: Modelo Poisson con IDs" && git push origin HEAD:main)
+          else
+            echo "⚠️ Archivo modelo_poisson.json no encontrado, saltando commit."
+          fi
