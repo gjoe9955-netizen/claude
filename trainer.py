@@ -76,16 +76,33 @@ def obtener_xg_understat():
             print(f"   ⚠️  Understat respondió {r.status_code}. Se usará solo goles reales.")
             return xg_map
 
-        # El JSON está embebido como:  datesData = JSON.parse('...')
-        # Los caracteres especiales vienen en formato \uXXXX dentro del string.
-        match = re.search(r"datesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
+        # Understat embebe los datos como: var datesData = JSON.parse('...')
+        # Probar varias variantes del patrón por si cambia el formato
+        PATRONES = [
+            r"var\s+datesData\s*=\s*JSON\.parse\('(.+?)'\)",
+            r"datesData\s*=\s*JSON\.parse\('(.+?)'\)",
+            r"datesData\s*=\s*JSON\.parse\(\"(.+?)\"\)",
+            r"'datesData'\s*,\s*JSON\.parse\('(.+?)'\)",
+        ]
+
+        match = None
+        for patron in PATRONES:
+            match = re.search(patron, r.text)
+            if match:
+                break
+
         if not match:
-            print("   ⚠️  No se encontró datesData en Understat. Formato cambió o hubo bloqueo.")
+            vars_encontradas = re.findall(r"var\s+(\w+Data)\s*=", r.text)
+            print(f"   ⚠️  No se encontró datesData en Understat.")
+            if vars_encontradas:
+                print(f"      Variables *Data en HTML: {vars_encontradas}")
+                print(f"      → Actualiza el regex con el nombre correcto.")
+            else:
+                print(f"      → Página vacía o bloqueada. HTTP {r.status_code}, {len(r.text)} bytes.")
             return xg_map
 
         # El contenido está escapado doble: primero decodificar el escape de JS
         raw = match.group(1)
-        # Reemplazar escapes de comilla simple usados por JS
         raw = raw.replace("\\'", "'")
         # Decodificar unicode escapes (\uXXXX)
         raw = raw.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
