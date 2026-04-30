@@ -35,9 +35,9 @@ bot = AsyncTeleBot(TOKEN)
 COOLDOWN = {}
 COOLDOWN_MINUTOS = 30
 
-# --- MEJORA 5: Cache del modelo en memoria ---
+# --- Cache del modelo en memoria ---
 _MODELO_CACHE = {"data": None, "ts": None}
-CACHE_TTL_SEGUNDOS = 3600  # refresco cada hora
+CACHE_TTL_SEGUNDOS = 3600
 
 async def obtener_modelo():
     """Carga modelo_poisson.json desde GitHub, con cache de 1 hora."""
@@ -52,7 +52,7 @@ async def obtener_modelo():
             return _MODELO_CACHE["data"], True
     except:
         pass
-    return _MODELO_CACHE["data"], False  # devuelve cache viejo si hay error
+    return _MODELO_CACHE["data"], False
 
 # --- Función de Búsqueda de Última Hora (Serper) ---
 async def obtener_contexto_real(l_q, v_q):
@@ -178,13 +178,8 @@ async def obtener_datos_mercado(equipo_l):
     except: pass
     return 1.85, 3.50, 4.00, False
 
-# --- MEJORA 2: Over/Under como señal de confirmación ---
+# --- Over/Under como señal de confirmación ---
 async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
-    """
-    Compara nuestra predicción Over/Under vs la del mercado.
-    Devuelve: factor multiplicador del stake (0.8 contradicción / 1.0 neutro / 1.2 confirmación)
-    y texto descriptivo.
-    """
     if not ODDS_API_KEY:
         return 1.0, "O/U: Sin API"
     try:
@@ -218,13 +213,8 @@ async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
         logging.error(f"Error O/U: {e}")
     return 1.0, "O/U: Sin datos"
 
-# --- MEJORA 4: Calibración del modelo con historial propio ---
+# --- Calibración del modelo con historial propio ---
 async def obtener_factor_calibracion():
-    """
-    Lee el historial y calcula un factor de corrección.
-    Si el bot dijo 65% promedio pero ganó 55%, ajusta hacia abajo.
-    Devuelve factor entre 0.85 y 1.15.
-    """
     url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
         r = await asyncio.to_thread(requests.get, url, timeout=10)
@@ -233,14 +223,14 @@ async def obtener_factor_calibracion():
         historial = r.json()
         completados = [h for h in historial if h.get('status') in ('✅ WIN', '❌ LOSS') and 'poisson' in h]
         if len(completados) < 10:
-            return 1.0  # muy pocos datos para calibrar
+            return 1.0
         wins = sum(1 for h in completados if h['status'] == '✅ WIN')
         tasa_real = wins / len(completados)
         tasa_predicha = sum(float(h['poisson'].replace('%', '')) / 100 for h in completados) / len(completados)
         if tasa_predicha == 0:
             return 1.0
         factor = tasa_real / tasa_predicha
-        return max(0.85, min(1.15, factor))  # clamp para evitar extremos
+        return max(0.85, min(1.15, factor))
     except:
         return 1.0
 
@@ -253,7 +243,7 @@ async def api_football_call(endpoint):
 
 async def obtener_h2h_directo(id_l, id_v):
     if not id_l or not id_v: 
-        return "H2H: Sin IDs válidos.", False, 0, 0
+        return "H2H: Sin IDs válidos.", False, 0, 0, 0
     
     headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
     try:
@@ -268,19 +258,60 @@ async def obtener_h2h_directo(id_l, id_v):
                     if w == 'HOME_TEAM': l += 1
                     elif w == 'AWAY_TEAM': v += 1
                     else: e += 1
-                return f"Local {l} | Visitante {v} | Empates {e}", True, l, v
-        return "H2H: Sin datos directos.", False, 0, 0
+                total = l + v + e
+                return f"Local {l} | Visitante {v} | Empates {e}", True, l, v, total
+        return "H2H: Sin datos directos.", False, 0, 0, 0
     except: 
-        return "H2H: Error API.", False, 0, 0
+        return "H2H: Error API.", False, 0, 0, 0
 
-# --- Lógica de validación unificada (usada por /validar y verificador.py) ---
+
+def calcular_factor_h2h(home_wins, away_wins, total_partidos):
+    """
+    Convierte el historial H2H en un factor de ajuste para las lambdas de Poisson.
+    
+    Lógica:
+    - Si el local ganó más del 60% de los H2H → lh sube hasta 8%, la baja hasta 8%
+    - Si el visitante ganó más del 60% → lh baja hasta 8%, la sube hasta 8%
+    - Si está equilibrado → sin ajuste (factor = 1.0)
+    - Peso del H2H: 15% del cálculo total (conservador, no domina sobre Poisson)
+    
+    Devuelve: (factor_lh, factor_la, texto_explicativo)
+    """
+    if total_partidos < 3:
+        return 1.0, 1.0, "H2H: Insuficientes datos"
+
+    tasa_local = home_wins / total_partidos
+    tasa_visita = away_wins / total_partidos
+
+    # Peso máximo del ajuste H2H: ±8%
+    MAX_AJUSTE = 0.08
+
+    if tasa_local > 0.60:
+        # Local domina históricamente
+        intensidad = min((tasa_local - 0.60) / 0.40, 1.0)  # escala de 0 a 1
+        ajuste = MAX_AJUSTE * intensidad
+        factor_lh = 1.0 + ajuste
+        factor_la = 1.0 - ajuste
+        texto = f"H2H 🏠 Dominio local ({tasa_local*100:.0f}%, +{ajuste*100:.1f}% lh)"
+    elif tasa_visita > 0.60:
+        # Visitante domina históricamente
+        intensidad = min((tasa_visita - 0.60) / 0.40, 1.0)
+        ajuste = MAX_AJUSTE * intensidad
+        factor_lh = 1.0 - ajuste
+        factor_la = 1.0 + ajuste
+        texto = f"H2H 🚩 Dominio visita ({tasa_visita*100:.0f}%, +{ajuste*100:.1f}% la)"
+    else:
+        factor_lh = 1.0
+        factor_la = 1.0
+        texto = f"H2H ⚖️ Equilibrado ({home_wins}L/{away_wins}V)"
+
+    return factor_lh, factor_la, texto
+
+
+# --- Lógica de validación unificada ---
 PICKS_VOID = ["no bet", "no apostar", "no apostar (sin valor)", "sin valor"]
 
 def evaluar_resultado(pick, partido, home_name, away_name, winner):
-    """
-    Determina WIN/LOSS/VOID de forma consistente.
-    winner: 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW'
-    """
     pick_lower = pick.lower()
     if any(v in pick_lower for v in PICKS_VOID):
         return "➖ VOID"
@@ -292,7 +323,7 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
         return "✅ WIN"
     return "❌ LOSS"
 
-# --- Comando Principal: Pronóstico Suavizado V2 ---
+# --- Comando Principal: Pronóstico V7 con H2H matemático ---
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
     if not SISTEMA_IA["estratega"]["nodo"]:
@@ -303,14 +334,13 @@ async def handle_pronostico(message):
         await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
     l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis Suavizado...")
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V7 (Poisson + H2H + Odds)...")
 
-    # --- MEJORA 5: Usar cache del modelo ---
     full_data, check_json = await obtener_modelo()
     if not full_data:
         await bot.edit_message_text("❌ Error al cargar el JSON del servidor.", message.chat.id, msg_espera.message_id); return
 
-    # Lanzar todas las tareas en paralelo
+    # Tareas en paralelo
     task_odds = obtener_datos_mercado(l_q)
     task_news = obtener_contexto_real(l_q, v_q)
     task_calib = obtener_factor_calibracion()
@@ -326,51 +356,57 @@ async def handle_pronostico(message):
         await bot.edit_message_text("❌ Equipo no encontrado en el JSON.", message.chat.id, msg_espera.message_id); return
 
     l_s, v_s = full_data[liga]['teams'][m_l], full_data[liga]['teams'][m_v]
-    h2h, check_h2h, home_wins, away_wins = await obtener_h2h_directo(l_s.get("id_api"), v_s.get("id_api"))
 
-    # --- REGLA 1: Poisson + Mercado (Suavizado 90/10) ---
+    # H2H — ahora devuelve también total_partidos
+    h2h, check_h2h, home_wins, away_wins, total_h2h = await obtener_h2h_directo(l_s.get("id_api"), v_s.get("id_api"))
+
+    # --- PASO 1: Lambdas base desde Poisson ---
     avg = full_data[liga]['averages']
-    lh = l_s['att_h'] * v_s['def_a'] * avg['league_home']
-    la = v_s['att_a'] * l_s['def_h'] * avg['league_away']
-    
+    lh_base = l_s['att_h'] * v_s['def_a'] * avg['league_home']
+    la_base = v_s['att_a'] * l_s['def_h'] * avg['league_away']
+
+    # --- PASO 2: Ajuste H2H sobre las lambdas (±8% máx, peso conservador) ---
+    factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
+    lh = lh_base * factor_lh_h2h
+    la = la_base * factor_la_h2h
+
+    # --- PASO 3: Probabilidad Poisson con lambdas ajustadas ---
     prob_poisson = 0
     for x in range(6):
         for y in range(6):
             if x > y: prob_poisson += poisson.pmf(x, lh) * poisson.pmf(y, la)
 
-    # --- MEJORA 4: Aplicar calibración ---
+    # --- PASO 4: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
+
+    # --- PASO 5: Mezcla final Poisson(85%) + Mercado(15%) ---
+    # Aumentamos peso del mercado de 10% a 15% para mayor realismo
     prob_market = 1 / c_l
-    p_win = (prob_poisson_calibrado * 0.90) + (prob_market * 0.10)
+    p_win = (prob_poisson_calibrado * 0.85) + (prob_market * 0.15)
     p_percent = p_win * 100
 
-    # --- MEJORA 2: Over/Under confirmación (en paralelo con lambdas ya calculadas) ---
+    # --- PASO 6: Over/Under como confirmación del stake ---
     ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
-    # --- REGLA 2: Edge y Margen de Error Suavizado ---
+    # --- PASO 7: Edge y Kelly ---
     edge_real = p_win - prob_market
     margen_error = 0.01
     edge_ajustado = edge_real - margen_error
 
-    # --- REGLA 3: Filtro Cuotas Trampa Flexibilizado ---
+    # Filtro cuotas trampa
     if 1.90 <= c_l <= 2.20 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
 
-    # --- MEJORA 3: Kelly Real ---
-    # Kelly% = (edge / (cuota - 1)) → fracción óptima del bankroll
-    # Aplicamos Kelly fraccional al 25% para mayor seguridad
     if edge_ajustado <= 0:
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
-        ou_factor = 1.0  # no aplica O/U si no hay apuesta
+        ou_factor = 1.0
     else:
         kelly_full = edge_ajustado / (c_l - 1)
-        kelly_fraccionado = kelly_full * 0.25  # Kelly al 25%
+        kelly_fraccionado = kelly_full * 0.25
         stake_base = round(kelly_fraccionado * 100, 2)
-        # Aplicar factor O/U (confirmación/contradicción)
         stake = round(stake_base * ou_factor, 2)
-        stake = max(0.25, min(stake, 3.0))  # clamp entre 0.25% y 3%
+        stake = max(0.25, min(stake, 3.0))
         pick_final = m_l
-        # Niveles basados en stake final para referencia visual
         if stake < 0.75:
             nivel = "BRONCE 🥉"
         elif stake < 1.25:
@@ -380,7 +416,7 @@ async def handle_pronostico(message):
         else:
             nivel = "DIAMANTE 💎"
 
-    # --- REGLA 8: Guardado en Historial ---
+    # --- Guardado en Historial ---
     fecha_hoy = (datetime.now(timezone.utc) + timedelta(hours=OFFSET_JUAREZ)).strftime('%Y-%m-%d %H:%M')
     async def task_github():
         await guardar_en_github(nuevo_registro={
@@ -394,45 +430,62 @@ async def handle_pronostico(message):
             "nivel": nivel,
             "status": "⏳ PENDIENTE"
         })
-    # Lógica de Deduplicación
+
     clave_partido = f"{m_l}_vs_{m_v}_{fecha_hoy[:10]}"
     ahora = datetime.now(timezone.utc)
     if clave_partido in COOLDOWN and (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60:
-        pass  # No guardar duplicado
+        pass
     else:
         COOLDOWN[clave_partido] = ahora
         asyncio.create_task(task_github())
 
-    # --- REGLA 9: Prompt IA ---
+    # --- Header del reporte ---
     calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos)"
-    header = (f"<b>🛠 REPORTE:</b> {'✅' if check_odds else '❌'} Mercado | "
-              f"{'✅' if check_json else '❌'} Poisson ({p_percent:.1f}%) | "
-              f"{'✅' if check_h2h else '❌'} H2H\n"
-              f"<b>📊 Calibración:</b> ×{calib_txt} | {ou_texto}\n"
-              f"————————————————————\n")
-    
+    h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste"
+
+    header = (
+        f"<b>🛠 REPORTE V7:</b> {'✅' if check_odds else '❌'} Mercado | "
+        f"{'✅' if check_json else '❌'} Poisson ({p_percent:.1f}%) | "
+        f"{'✅' if check_h2h else '❌'} H2H\n"
+        f"<b>⚽ Lambdas:</b> λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f})\n"
+        f"<b>🔄 H2H:</b> {h2h_texto} → {h2h_ajuste_txt}\n"
+        f"<b>📊 Calibración:</b> ×{calib_txt} | {ou_texto}\n"
+        f"{'—'*20}\n"
+    )
+
+    # --- Prompt IA con todos los datos ---
     prompt_e = f"""
-Eres analista profesional. Partido: {m_l} vs {m_v}
-Datos: Prob: {p_percent:.1f}%, Cuota: {c_l}, Edge: {edge_ajustado*100:.2f}%, H2H: {h2h}
-Señal O/U: {ou_texto}
-Instrucciones: 
-1. Si edge <= 0, di NO BET.
-2. Si edge > 0, explica por qué hay valor basándote en que Poisson supera al mercado.
-3. Máximo 100 palabras.
+Eres analista profesional de fútbol. Partido: {m_l} vs {m_v}
+
+DATOS MATEMÁTICOS:
+- Prob. victoria local (modelo): {p_percent:.1f}%
+- Cuota mercado local: {c_l} (implica {prob_market*100:.1f}%)
+- Edge ajustado: {edge_ajustado*100:.2f}%
+- H2H últimos partidos: {h2h} → ajuste aplicado: {h2h_ajuste_txt}
+- Señal O/U: {ou_texto}
+- Lambda local ajustada: {lh:.2f} goles esperados
+- Lambda visita ajustada: {la:.2f} goles esperados
+
+INSTRUCCIONES:
+1. Si edge <= 0, di NO BET y explica brevemente por qué no hay valor.
+2. Si edge > 0, explica en máximo 100 palabras por qué hay valor combinando Poisson, H2H y mercado.
+3. Menciona si el H2H refuerza o contradice el pronóstico estadístico.
+
 🎯 PICK: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
 """
-    
+
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
     analisis = html.escape(analisis_raw)
     footer = f"\n\n{'—'*20}\n🛰 <b>ESTRATEGA:</b> <code>{SISTEMA_IA['estratega']['api']}</code>"
 
     if SISTEMA_IA["auditor"]["nodo"]:
         prompt_a = (
-            f"ERES AUDITOR. Valida: '{analisis_raw}'\n"
-            f"NOTICIAS:\n{contexto_noticias}\n"
-            f"Resumen muy breve."
+            f"ERES AUDITOR. Valida este análisis: '{analisis_raw}'\n"
+            f"NOTICIAS RECIENTES:\n{contexto_noticias}\n"
+            f"H2H: {h2h}\n"
+            f"¿Hay alguna contradicción entre el análisis y las noticias o el H2H? Resumen muy breve."
         )
         auditoria_raw = await ejecutar_ia("auditor", prompt_a)
         footer += f"\n🛡 <b>AUDITOR:</b> <code>{SISTEMA_IA['auditor']['api']}</code>"
@@ -444,7 +497,6 @@ Instrucciones:
 
 # --- Comandos Adicionales ---
 
-# --- MEJORA 5: Comando /stats ---
 @bot.message_handler(commands=['stats'])
 async def cmd_stats(message):
     url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
@@ -465,7 +517,6 @@ async def cmd_stats(message):
         losses = len(completados) - wins
         pct_aciertos = (wins / len(completados)) * 100
 
-        # ROI: suma de ganancias/pérdidas sobre total invertido
         roi_total = 0
         invertido_total = 0
         for h in completados:
@@ -479,7 +530,6 @@ async def cmd_stats(message):
                     roi_total -= stake_val
         roi_pct = (roi_total / invertido_total * 100) if invertido_total > 0 else 0
 
-        # Racha actual
         racha = 0
         racha_tipo = ""
         for h in reversed(completados):
@@ -492,7 +542,6 @@ async def cmd_stats(message):
                 break
         racha_emoji = "🔥" if racha_tipo == "✅ WIN" else "❄️"
 
-        # Desglose por nivel
         niveles_stats = {}
         for h in completados:
             niv = h.get('nivel', 'Desconocido').split(' ')[0]
@@ -528,7 +577,6 @@ async def cmd_stats(message):
 async def cmd_historial(message):
     url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
-        # CORRECCIÓN: llamada async
         r = await asyncio.to_thread(requests.get, url, timeout=10)
         historial = r.json()
         if not historial:
@@ -544,7 +592,6 @@ async def cmd_validar(message):
     msg_espera = await bot.reply_to(message, "🔍 Sincronizando resultados...")
     url_h = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
-        # CORRECCIÓN: llamada async
         r_hist = await asyncio.to_thread(requests.get, url_h, timeout=10)
         historial_raw = r_hist.json()
         data_api = await api_football_call("matches?status=FINISHED")
@@ -554,12 +601,10 @@ async def cmd_validar(message):
         for item in historial_raw:
             if item.get("status") == "⏳ PENDIENTE":
                 for m in data_api['matches']:
-                    # CORRECCIÓN: usar 'name' en lugar de 'shortName' para consistencia con verificador.py
                     h_api = m['homeTeam']['name'].lower()
                     a_api = m['awayTeam']['name'].lower()
                     if h_api in item['partido'].lower() and a_api in item['partido'].lower():
                         winner = m['score']['winner']
-                        # CORRECCIÓN: usar función unificada evaluar_resultado
                         item['status'] = evaluar_resultado(item['pick'], item['partido'], h_api, a_api, winner)
                         item['marcador_real'] = f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
                         count += 1
@@ -592,7 +637,6 @@ async def cmd_tabla(message):
 
 @bot.message_handler(commands=['equipos'])
 async def cmd_equipos(message):
-    # CORRECCIÓN: llamada async
     r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
     res = r.json()
     liga = next(iter(res))
@@ -642,9 +686,9 @@ async def cb_fin(call):
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
     help_text = (
-        "🤖 <b>SISTEMA V6.0 PRO</b>\n\n"
+        "🤖 <b>SISTEMA V7.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Análisis + Kelly Real.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Análisis Poisson + H2H + Odds + Kelly.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
