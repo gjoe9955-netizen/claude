@@ -6,4 +6,4 @@ scipy==1.13.1
 python-dotenv==1.0.1
 openai==1.54.3
 aiohttp==3.10.11
-understat==0.1.14
+understat
