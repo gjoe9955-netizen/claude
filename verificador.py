@@ -10,7 +10,7 @@ load_dotenv()
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 # CORRECCIÓN: Usar el nombre de Railway para consistencia
 API_KEY_FOOTBALL = os.getenv('FOOTBALL_DATA_API_KEY') 
-REPO_PATH = "gjoe9955-netizen/entrenador2"
+REPO_PATH = "gjoe9955-netizen/claude"
 # CORRECCIÓN: Apuntar al archivo correcto que usa el bot
 HISTORIAL_FILE = "historial.json" 
 
