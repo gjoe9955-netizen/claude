@@ -147,8 +147,9 @@
             }
         }
     },
-    "last_update": "2026-04-30 18:30:58",
+    "last_update": "2026-04-30 18:44:47",
     "time_decay_lambda": 0.007,
     "xg_weight": 0.6,
-    "xg_cobertura_pct": 0.0
+    "xg_cobertura_pct": 0.0,
+    "xg_source": "understat.com"
 }
