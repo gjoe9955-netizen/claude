@@ -21,16 +21,6 @@ XG_WEIGHT = 0.6
 
 # ===========================================================================
 # UNDERSTAT — ENDPOINT AJAX INTERNO
-#
-# Understat bloquea el scraping HTML con Cloudflare (~18KB vacío).
-# El endpoint AJAX interno devuelve JSON sin protección adicional:
-#
-#   POST https://understat.com/main/getMatchesStats/
-#   Content-Type: application/x-www-form-urlencoded
-#   Body: league=La_liga&season=2024
-#
-# Respuesta: {"response": true, "data": "[JSON con partidos y xG]"}
-# Cada partido: {"h": {"title": "Real Madrid"}, "xG": {"h": "1.82", ...}, ...}
 # ===========================================================================
 
 def obtener_xg_understat():
@@ -228,8 +218,42 @@ def train_spain():
         for team in pd.unique(df[['home', 'away']].values.ravel()):
             h_df = df[df['home'] == team]
             a_df = df[df['away'] == team]
+
+            att_h = np.average(h_df['goals_h'], weights=h_df['weight']) / avg_h if not h_df.empty else 1.0
+            def_h = np.average(h_df['goals_a'], weights=h_df['weight']) / avg_a if not h_df.empty else 1.0
+            att_a = np.average(a_df['goals_a'], weights=a_df['weight']) / avg_a if not a_df.empty else 1.0
+            def_a = np.average(a_df['goals_h'], weights=a_df['weight']) / avg_h if not a_df.empty else 1.0
+
             teams_stats[team] = {
                 "id_api": int(team_ids.get(team, 0)),
-                "att_h": float(np.average(h_df['goals_h'], weights=h_df['weight']) / avg_h if not h_df.empty else 1.0),
-                "def_h": float(np.average(h_df['goals_a'], weights=h_df['weight']) / avg_a if not h_df.empty else 1.0),
-                "att_a": float(np.average(a_df['goals_a'], weights=a_df['weight']) / avg_a if not a_df
+                "att_h": float(att_h),
+                "def_h": float(def_h),
+                "att_a": float(att_a),
+                "def_a": float(def_a)
+            }
+
+        output = {
+            "LaLiga": {
+                "averages": {"league_home": float(avg_h), "league_away": float(avg_a)},
+                "teams": teams_stats
+            },
+            "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "meta": {
+                "partidos_con_xg": partidos_con_xg,
+                "partidos_sin_xg": partidos_sin_xg,
+                "xg_weight": XG_WEIGHT,
+                "time_decay_lambda": TIME_DECAY_LAMBDA
+            }
+        }
+
+        with open('modelo_poisson.json', 'w', encoding='utf-8') as f:
+            json.dump(output, f, indent=4, ensure_ascii=False)
+
+        print(f"✅ modelo_poisson.json actualizado.")
+        print(f"   Equipos: {len(teams_stats)} | Con xG: {partidos_con_xg} | Sin xG: {partidos_sin_xg}")
+
+    except Exception as e:
+        print(f"❌ Error crítico: {e}")
+
+if __name__ == "__main__":
+    train_spain()
