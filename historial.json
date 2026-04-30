@@ -1,1 +1,15 @@
-[]
+[
+    {
+        "fecha": "2026-04-30 17:16",
+        "partido": "Villarreal CF vs Levante UD",
+        "pick": "Villarreal CF",
+        "poisson": "66.3%",
+        "cuota": 1.76,
+        "edge": "10.0%",
+        "stake": "3.0%",
+        "nivel": "DIAMANTE 💎",
+        "pick_riesgo": "Sin valor alternativo",
+        "stake_riesgo": "0%",
+        "status": "⏳ PENDIENTE"
+    }
+]
