@@ -5,10 +5,19 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
+# ===========================================================================
+# Fuentes de datos:
+#   - Football-Data.org → estructura de partidos, IDs de equipos, resultados
+#   - Understat.com     → xG gratis, sin API key (scraping del JSON embebido)
+# ===========================================================================
+
 # Configuración Football-Data.org
 API_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
 URL = "https://api.football-data.org/v4/competitions/PD/matches?status=FINISHED"
 HEADERS = {"X-Auth-Token": API_KEY}
+
+# Understat — URL de LaLiga (temporada actual; se actualiza automáticamente)
+UNDERSTAT_URL = "https://understat.com/league/La_liga"
 
 # ===========================================================================
 # Time-decay: 0.007 da ~12% de peso a partidos de hace 6 meses,
@@ -17,46 +26,156 @@ HEADERS = {"X-Auth-Token": API_KEY}
 TIME_DECAY_LAMBDA = 0.007
 
 # ===========================================================================
-# MEJORA 1: xG (Expected Goals)
-#
-# Por qué importa:
-#   Los goles reales tienen ruido: penales, golazos de media cancha,
-#   errores de portero. xG mide cuánto DEBERÍA haber marcado cada equipo
-#   según la calidad de sus disparos, haciendo las lambdas más estables.
-#
-# Implementación:
-#   Se mezcla xG con goles reales usando XG_WEIGHT.
+# xG Weight: mezcla xG con goles reales.
 #   valor_final = (xG * XG_WEIGHT) + (goles_reales * (1 - XG_WEIGHT))
-#
 #   XG_WEIGHT = 0.6  →  60% xG, 40% goles reales.
-#   Si la API no devuelve xG para un partido, ese partido usa solo goles reales
-#   y se registra como fallback (transparente en el log).
-#
-# Football-Data.org devuelve xG en el campo:
-#   score.regularTime  (no siempre disponible; plan Free lo incluye en PD)
-#   Clave: m['score'].get('regularTime') con subclaves 'home' y 'away'
-#   Nota: el campo real varía por versión de la API; el código prueba
-#   'regularTime' y luego 'halfTime' como fallback antes de usar solo goles.
 # ===========================================================================
-XG_WEIGHT = 0.6  # proporción de xG vs goles reales
+XG_WEIGHT = 0.6
 
 
-def extraer_xg(score):
+# ===========================================================================
+# UNDERSTAT SCRAPER
+#
+# Understat embebe todos los datos del partido en el HTML de la página
+# como una variable JS: datesData = JSON.parse('...')
+# No requiere API key. Se parsea con regex y json.loads.
+#
+# Formato de cada partido en datesData:
+#   {
+#     "id": "...",
+#     "h": {"title": "Real Madrid", ...},
+#     "a": {"title": "Barcelona", ...},
+#     "goals": {"h": "2", "a": "1"},
+#     "xG": {"h": "1.82", "a": "1.23"},
+#     "datetime": "2024-09-14 20:00:00",
+#     "isResult": true
+#   }
+# ===========================================================================
+
+def obtener_xg_understat():
     """
-    Intenta extraer xG del objeto score de Football-Data.org.
-    Prueba los campos conocidos donde aparece según el plan/versión.
-    Devuelve (xg_home, xg_away) o (None, None) si no está disponible.
-    """
-    # Campo principal donde Football-Data publica xG
-    for campo in ('regularTime', 'extraTime'):
-        ft = score.get(campo)
-        if ft and ft.get('home') is not None and ft.get('away') is not None:
-            # Verificar que son valores razonables de xG (entre 0 y 8)
-            h, a = ft['home'], ft['away']
-            if isinstance(h, float) and isinstance(a, float) and 0 <= h <= 8 and 0 <= a <= 8:
-                return h, a
-    return None, None
+    Descarga la página de Understat de LaLiga y extrae el JSON embebido
+    con xG de todos los partidos de la temporada.
 
+    Devuelve dict: {(home_norm, away_norm): (xg_h, xg_a)}
+    Donde home_norm y away_norm son nombres en minúsculas sin espacios extra.
+    """
+    import re
+
+    xg_map = {}
+    try:
+        headers_us = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            )
+        }
+        r = requests.get(UNDERSTAT_URL, headers=headers_us, timeout=20)
+        if r.status_code != 200:
+            print(f"   ⚠️  Understat respondió {r.status_code}. Se usará solo goles reales.")
+            return xg_map
+
+        # El JSON está embebido como:  datesData = JSON.parse('...')
+        # Los caracteres especiales vienen en formato \uXXXX dentro del string.
+        match = re.search(r"datesData\s*=\s*JSON\.parse\('(.+?)'\)", r.text)
+        if not match:
+            print("   ⚠️  No se encontró datesData en Understat. Formato cambió o hubo bloqueo.")
+            return xg_map
+
+        # El contenido está escapado doble: primero decodificar el escape de JS
+        raw = match.group(1)
+        # Reemplazar escapes de comilla simple usados por JS
+        raw = raw.replace("\\'", "'")
+        # Decodificar unicode escapes (\uXXXX)
+        raw = raw.encode('utf-8').decode('unicode_escape').encode('latin-1').decode('utf-8')
+
+        partidos = json.loads(raw)
+
+        for p in partidos:
+            # Solo partidos con resultado
+            if not p.get('isResult'):
+                continue
+
+            xg_data = p.get('xG', {})
+            if not xg_data:
+                continue
+
+            try:
+                xg_h = float(xg_data.get('h', 0))
+                xg_a = float(xg_data.get('a', 0))
+            except (TypeError, ValueError):
+                continue
+
+            # Validación básica
+            if not (0 <= xg_h <= 8 and 0 <= xg_a <= 8):
+                continue
+
+            home_name = p.get('h', {}).get('title', '').strip().lower()
+            away_name = p.get('a', {}).get('title', '').strip().lower()
+
+            if home_name and away_name:
+                xg_map[(home_name, away_name)] = (xg_h, xg_a)
+
+        print(f"   ✅ Understat: {len(xg_map)} partidos con xG cargados.")
+
+    except Exception as e:
+        print(f"   ⚠️  Error scraping Understat: {e}. Se usará solo goles reales.")
+
+    return xg_map
+
+
+# ===========================================================================
+# NORMALIZACIÓN DE NOMBRES
+#
+# Football-Data.org y Understat usan nombres distintos para el mismo equipo.
+# Esta tabla cubre los casos comunes de LaLiga.
+# Si un equipo nuevo no aparece, el fallback es goles reales (sin xG).
+# ===========================================================================
+
+NOMBRE_FD_A_US = {
+    # Football-Data name                : Understat name (lowercase)
+    "real madrid cf"                    : "real madrid",
+    "fc barcelona"                      : "barcelona",
+    "atletico de madrid"                : "atletico madrid",
+    "athletic club"                     : "athletic club",
+    "real sociedad de fútbol"           : "real sociedad",
+    "real sociedad de futbol"           : "real sociedad",
+    "villarreal cf"                     : "villarreal",
+    "real betis balompié"               : "real betis",
+    "real betis balompie"               : "real betis",
+    "sevilla fc"                        : "sevilla",
+    "valencia cf"                       : "valencia",
+    "rayo vallecano de madrid"          : "rayo vallecano",
+    "getafe cf"                         : "getafe",
+    "ud girona fc"                      : "girona",
+    "deportivo alavés"                  : "alaves",
+    "deportivo alaves"                  : "alaves",
+    "ca osasuna"                        : "osasuna",
+    "rc celta de vigo"                  : "celta vigo",
+    "ud almería"                        : "almeria",
+    "ud almeria"                        : "almeria",
+    "rcd mallorca"                      : "mallorca",
+    "cd leganés"                        : "leganes",
+    "cd leganes"                        : "leganes",
+    "real valladolid cf"                : "valladolid",
+    "cd espanyol de barcelona"          : "espanyol",
+    "ud las palmas"                     : "las palmas",
+    "real racing club de santander"     : "racing santander",
+}
+
+def normalizar_nombre(nombre_fd):
+    """
+    Convierte nombre de Football-Data.org al equivalente en Understat.
+    Si no está en el mapa, devuelve el nombre en minúsculas tal cual.
+    """
+    key = nombre_fd.strip().lower()
+    return NOMBRE_FD_A_US.get(key, key)
+
+
+# ===========================================================================
+# ENTRENAMIENTO PRINCIPAL
+# ===========================================================================
 
 def train_spain():
     if not API_KEY:
@@ -65,6 +184,12 @@ def train_spain():
 
     try:
         print(f"Consultando LaLiga Española, aplicando Time-Decay λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}...")
+
+        # --- Paso 1: Descargar xG de Understat ---
+        print("Descargando xG desde Understat...")
+        xg_understat = obtener_xg_understat()
+
+        # --- Paso 2: Descargar partidos de Football-Data.org ---
         response = requests.get(URL, headers=HEADERS, timeout=15)
 
         if response.status_code != 200:
@@ -94,16 +219,17 @@ def train_spain():
                 goals_h = m['score']['fullTime']['home']
                 goals_a = m['score']['fullTime']['away']
 
-                # --- MEJORA 1: Intentar obtener xG ---
-                xg_h, xg_a = extraer_xg(m['score'])
+                # --- Intentar obtener xG de Understat ---
+                home_us = normalizar_nombre(home_name)
+                away_us = normalizar_nombre(away_name)
+                xg_data = xg_understat.get((home_us, away_us))
 
-                if xg_h is not None:
-                    # Mezcla ponderada: XG_WEIGHT de xG + resto de goles reales
+                if xg_data:
+                    xg_h, xg_a = xg_data
                     valor_h = (xg_h * XG_WEIGHT) + (goals_h * (1 - XG_WEIGHT))
                     valor_a = (xg_a * XG_WEIGHT) + (goals_a * (1 - XG_WEIGHT))
                     partidos_con_xg += 1
                 else:
-                    # Fallback: solo goles reales
                     valor_h = float(goals_h)
                     valor_a = float(goals_a)
                     partidos_sin_xg += 1
@@ -146,7 +272,8 @@ def train_spain():
                 "def_a": float(def_a)
             }
 
-        xg_cobertura = partidos_con_xg / (partidos_con_xg + partidos_sin_xg) * 100 if goles else 0
+        total_partidos = partidos_con_xg + partidos_sin_xg
+        xg_cobertura = partidos_con_xg / total_partidos * 100 if total_partidos else 0
 
         output = {
             "LaLiga": {
@@ -156,7 +283,8 @@ def train_spain():
             "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "time_decay_lambda": TIME_DECAY_LAMBDA,
             "xg_weight": XG_WEIGHT,
-            "xg_cobertura_pct": round(xg_cobertura, 1)
+            "xg_cobertura_pct": round(xg_cobertura, 1),
+            "xg_source": "understat.com"
         }
 
         with open('modelo_poisson.json', 'w', encoding='utf-8') as f:
@@ -164,14 +292,18 @@ def train_spain():
 
         print(f"✅ modelo_poisson.json actualizado.")
         print(f"   Equipos: {len(teams_stats)} | λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}")
-        print(f"   xG disponible: {partidos_con_xg} partidos ({xg_cobertura:.1f}%) | Sin xG: {partidos_sin_xg} partidos")
+        print(f"   xG (Understat): {partidos_con_xg} partidos ({xg_cobertura:.1f}%) | Sin xG: {partidos_sin_xg} partidos")
 
         if xg_cobertura == 0:
-            print("   ⚠️  API no devolvió xG en ningún partido. El modelo usó solo goles reales.")
-            print("      Esto es normal en el plan Free de Football-Data.org para temporadas anteriores.")
+            print("   ⚠️  No se pudo obtener xG de Understat. El modelo usó solo goles reales.")
+            print("      Posibles causas: bloqueo de IP en CI/CD, cambio de formato HTML, temporada no iniciada.")
+        elif xg_cobertura < 50:
+            print(f"   ⚠️  Cobertura xG baja ({xg_cobertura:.1f}%). Revisar tabla NOMBRE_FD_A_US en trainer.py.")
+            print("      Equipos sin xG probablemente tienen nombre distinto entre Football-Data y Understat.")
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
+
 
 if __name__ == "__main__":
     train_spain()
