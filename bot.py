@@ -112,27 +112,49 @@ async def guardar_en_github(nuevo_registro=None, historial_completo=None):
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     try:
-        r = await asyncio.to_thread(requests.get, url, headers=headers)
-        sha = r.json()['sha'] if r.status_code == 200 else None
-        
+        # GET para obtener SHA actual del archivo
+        r_get = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+        r_get_json = r_get.json()
+
+        if r_get.status_code == 200:
+            sha = r_get_json.get('sha')
+            contenido_raw = r_get_json.get('content', '')
+            # La API de GitHub devuelve el contenido con saltos de línea embebidos
+            historial_actual = json.loads(base64.b64decode(contenido_raw.replace('\n', '')).decode('utf-8'))
+        elif r_get.status_code == 404:
+            sha = None          # Archivo nuevo: no se necesita SHA
+            historial_actual = []
+        else:
+            logging.error(f"GitHub GET falló: {r_get.status_code} — {r_get_json}")
+            return
+
         if historial_completo is None:
-            if r.status_code == 200:
-                historial = json.loads(base64.b64decode(r.json()['content']).decode('utf-8'))
-            else:
-                historial = []
-            if nuevo_registro: historial.append(nuevo_registro)
+            if nuevo_registro:
+                historial_actual.append(nuevo_registro)
+            historial = historial_actual
         else:
             historial = historial_completo
 
-        nuevo_contenido = base64.b64encode(json.dumps(historial, indent=4, ensure_ascii=False).encode('utf-8')).decode('utf-8')
+        nuevo_contenido = base64.b64encode(
+            json.dumps(historial, indent=4, ensure_ascii=False).encode('utf-8')
+        ).decode('utf-8')
+
         payload = {
             "message": "🤖 Actualización de Historial",
             "content": nuevo_contenido,
-            "sha": sha
         }
-        await asyncio.to_thread(requests.put, url, headers=headers, json=payload)
+        # SHA es obligatorio si el archivo ya existe; omitirlo si es nuevo
+        if sha:
+            payload["sha"] = sha
+
+        r_put = await asyncio.to_thread(requests.put, url, headers=headers, json=payload, timeout=15)
+        if r_put.status_code not in (200, 201):
+            logging.error(f"GitHub PUT falló: {r_put.status_code} — {r_put.json()}")
+        else:
+            logging.info(f"✅ historial.json actualizado en GitHub ({len(historial)} registros)")
+
     except Exception as e:
-        logging.error(f"Error GitHub: {e}")
+        logging.error(f"Error GitHub: {e}", exc_info=True)
 
 # --- Estado Global ---
 SISTEMA_IA = {
@@ -619,25 +641,7 @@ async def handle_pronostico(message):
     # --- PASO 9: Over/Under como confirmación del stake ---
     ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
-    # --- PASO 10: Edge y Kelly ---
-    edge_real = p_win - prob_market
-    margen_error = 0.005
-    # Shin penaliza el edge si los métodos divergen
-    edge_ajustado = (edge_real - margen_error) * shin_factor
-
-    # Filtro cuotas trampa
-    if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
-        edge_ajustado = -0.001
-
-    # Cuota del empate como filtro adicional
-    if c_e < 3.0 and edge_ajustado > 0:
-        edge_ajustado *= 0.80
-        empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge reducido 20%"
-    else:
-        empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
-
-    # Variables de pick de riesgo (se calculan siempre)
-    # Probabilidades Poisson para empate y visitante
+    # --- PASO 10: Probabilidades Poisson para los 3 resultados ---
     prob_poisson_empate = 0
     prob_poisson_visita = 0
     for x in range(7):
@@ -648,64 +652,71 @@ async def handle_pronostico(message):
             elif y > x:
                 prob_poisson_visita += p
 
-    prob_poisson_empate_cal = prob_poisson_empate * factor_calibracion
-    prob_poisson_visita_cal = prob_poisson_visita * factor_calibracion
+    prob_poisson_calibrado_local   = prob_poisson * factor_calibracion
+    prob_poisson_empate_cal        = prob_poisson_empate * factor_calibracion
+    prob_poisson_visita_cal        = prob_poisson_visita * factor_calibracion
 
+    # Sobrescribir p_win con la versión nombrada correctamente
+    p_win = prob_poisson_calibrado_local
+
+    prob_market_l = (prob_market_simple + shin_l) / 2   # ya calculado antes como prob_market
     prob_market_e = (shin_e + (1/c_e)/overround) / 2
     prob_market_v = (shin_v + (1/c_v)/overround) / 2
 
-    edge_empate  = (prob_poisson_empate_cal  - prob_market_e) - margen_error
-    edge_visita  = (prob_poisson_visita_cal  - prob_market_v) - margen_error
+    margen_error = 0.005
 
-    # Pick principal (local)
-    if edge_ajustado <= 0:
-        nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
-        ou_factor = 1.0
+    # --- Edge bruto para los 3 resultados ---
+    edge_local_raw  = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
+    edge_empate     = (prob_poisson_empate_cal - prob_market_e - margen_error) * shin_factor
+    edge_visita     = (prob_poisson_visita_cal - prob_market_v - margen_error) * shin_factor
 
-        # --- Pick de riesgo: empate o visitante con mayor edge ---
-        mejor_edge_riesgo = max(edge_empate, edge_visita)
-        if mejor_edge_riesgo > 0:
-            if edge_empate >= edge_visita:
-                pick_riesgo_nombre = f"Empate"
-                pick_riesgo_cuota  = c_e
-                edge_riesgo        = edge_empate
-                prob_riesgo        = prob_poisson_empate_cal * 100
-            else:
-                pick_riesgo_nombre = m_v
-                pick_riesgo_cuota  = c_v
-                edge_riesgo        = edge_visita
-                prob_riesgo        = prob_poisson_visita_cal * 100
-
-            # Kelly fraccionado con cap 1.0% para pick de riesgo
-            kelly_riesgo = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
-            stake_riesgo = round(min(max(kelly_riesgo * 100, 0.25), 1.0), 2)
-
-            if stake_riesgo < 0.50:
-                nivel_riesgo = "RIESGO BAJO ⚠️"
-            elif stake_riesgo < 0.75:
-                nivel_riesgo = "RIESGO MEDIO 🎲"
-            else:
-                nivel_riesgo = "RIESGO ALTO 🔴"
-        else:
-            pick_riesgo_nombre = None
-            stake_riesgo       = 0
-            nivel_riesgo       = ""
-            edge_riesgo        = 0
-            prob_riesgo        = 0
-            pick_riesgo_cuota  = 0
+    # --- Filtros adicionales sobre edge local ---
+    edge_ajustado = edge_local_raw
+    # Filtro cuotas trampa en mercado equilibrado
+    if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
+        edge_ajustado = -0.001
+    # Penalización si cuota de empate es muy baja (partido abierto)
+    if c_e < 3.0 and edge_ajustado > 0:
+        edge_ajustado *= 0.80
+        empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge local reducido 20%"
     else:
-        kelly_full = edge_ajustado / (c_l - 1)
+        empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
+
+    # --- Filtros equivalentes para visitante ---
+    if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
+        edge_visita = -0.001
+    if c_e < 3.0 and edge_visita > 0:
+        edge_visita *= 0.80
+
+    # --- Selección del pick principal: el resultado con mayor edge positivo ---
+    candidatos = []
+    if edge_ajustado > 0:
+        candidatos.append(("local",   edge_ajustado, c_l, m_l,     prob_poisson_calibrado_local * 100))
+    if edge_empate > 0:
+        candidatos.append(("empate",  edge_empate,   c_e, "Empate", prob_poisson_empate_cal * 100))
+    if edge_visita > 0:
+        candidatos.append(("visita",  edge_visita,   c_v, m_v,      prob_poisson_visita_cal * 100))
+
+    pick_riesgo_nombre = None
+    stake_riesgo       = 0
+    nivel_riesgo       = ""
+    edge_riesgo        = 0
+    prob_riesgo        = 0
+    pick_riesgo_cuota  = 0
+
+    if candidatos:
+        # Ordenar por edge descendente; el primero es el pick principal
+        candidatos.sort(key=lambda c: c[1], reverse=True)
+        tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
+
+        kelly_full       = edge_principal / (cuota_pick - 1)
         kelly_fraccionado = kelly_full * 0.25
-        stake_base = round(kelly_fraccionado * 100, 2)
-        stake = round(stake_base * ou_factor, 2)
-        stake = max(0.25, min(stake, 3.0))
-        pick_final = m_l
-        pick_riesgo_nombre = None
-        stake_riesgo = 0
-        nivel_riesgo = ""
-        edge_riesgo = 0
-        prob_riesgo = 0
-        pick_riesgo_cuota = 0
+        stake_base       = round(kelly_fraccionado * 100, 2)
+        stake            = round(stake_base * ou_factor, 2)
+        stake            = max(0.25, min(stake, 3.0))
+        pick_final       = nombre_pick
+        p_percent        = prob_pick_pct
+
         if stake < 0.75:
             nivel = "BRONCE 🥉"
         elif stake < 1.25:
@@ -715,27 +726,54 @@ async def handle_pronostico(message):
         else:
             nivel = "DIAMANTE 💎"
 
+        # Si hay un segundo candidato, mostrarlo como pick de riesgo
+        if len(candidatos) > 1:
+            _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
+            kelly_riesgo  = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
+            stake_riesgo  = round(min(max(kelly_riesgo * 100, 0.25), 1.0), 2)
+            if stake_riesgo < 0.50:
+                nivel_riesgo = "RIESGO BAJO ⚠️"
+            elif stake_riesgo < 0.75:
+                nivel_riesgo = "RIESGO MEDIO 🎲"
+            else:
+                nivel_riesgo = "RIESGO ALTO 🔴"
+    else:
+        # Sin valor en ningún resultado
+        nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
+        ou_factor  = 1.0
+        tipo_pick  = "ninguno"
+        cuota_pick = 0
+        prob_pick_pct = 0
+        edge_principal = 0
+        nombre_pick = "No Bet"
+
     # --- Guardado en Historial ---
     fecha_hoy = (datetime.now(timezone.utc) + timedelta(hours=OFFSET_JUAREZ)).strftime('%Y-%m-%d %H:%M')
+    registro = {
+        "fecha": fecha_hoy,
+        "partido": f"{m_l} vs {m_v}",
+        "pick": pick_final,
+        "poisson": f"{p_percent:.1f}%",
+        "cuota": cuota_pick if pick_final != "No Bet" else c_l,
+        "edge": f"{edge_principal*100:.1f}%" if pick_final != "No Bet" else "0.0%",
+        "stake": f"{stake}%",
+        "nivel": nivel,
+        "pick_riesgo": pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo",
+        "stake_riesgo": f"{stake_riesgo}%" if stake_riesgo else "0%",
+        "status": "⏳ PENDIENTE"
+    }
+
     async def task_github():
-        await guardar_en_github(nuevo_registro={
-            "fecha": fecha_hoy,
-            "partido": f"{m_l} vs {m_v}",
-            "pick": pick_final,
-            "poisson": f"{p_percent:.1f}%",
-            "cuota": c_l,
-            "edge": f"{edge_ajustado*100:.1f}%",
-            "stake": f"{stake}%",
-            "nivel": nivel,
-            "pick_riesgo": pick_riesgo_desc,
-            "stake_riesgo": f"{stake_riesgo}%" if stake_riesgo else "0%",
-            "status": "⏳ PENDIENTE"
-        })
+        try:
+            logging.info(f"[GitHub] Guardando historial: {registro['partido']} → {registro['pick']}")
+            await guardar_en_github(nuevo_registro=registro)
+        except Exception as e:
+            logging.error(f"[GitHub] task_github excepción: {e}", exc_info=True)
 
     clave_partido = f"{m_l}_vs_{m_v}_{fecha_hoy[:10]}"
     ahora = datetime.now(timezone.utc)
     if clave_partido in COOLDOWN and (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60:
-        pass
+        logging.info(f"[Cooldown] Ignorando guardado duplicado para {clave_partido}")
     else:
         COOLDOWN[clave_partido] = ahora
         asyncio.create_task(task_github())
@@ -749,11 +787,12 @@ async def handle_pronostico(message):
     if not serper_txt: serper_txt = " Sin bajas detectadas"
 
     # Bloque de decisión: lo primero que ve el usuario
+    tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
     if pick_final == "No Bet":
         if pick_riesgo_nombre:
             decision_block = (
                 f"<b>╔{'═'*22}╗</b>\n"
-                f"<b>║  🚫 NO BET — LOCAL          ║</b>\n"
+                f"<b>║  🚫 NO BET — SIN VALOR      ║</b>\n"
                 f"<b>╠{'═'*22}╣</b>\n"
                 f"<b>║  {nivel_riesgo:<22}║</b>\n"
                 f"<b>║  🎲 {pick_riesgo_nombre:<20}║</b>\n"
@@ -771,17 +810,24 @@ async def handle_pronostico(message):
         decision_block = (
             f"<b>╔{'═'*22}╗</b>\n"
             f"<b>║  {nivel:<22}║</b>\n"
-            f"<b>║  🎯 {pick_final:<20}║</b>\n"
+            f"<b>║  {tipo_emoji} {pick_final:<20}║</b>\n"
             f"<b>║  💰 Stake: {stake}% del bankroll{' '*(9-len(str(stake)))}║</b>\n"
-            f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_ajustado*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
+            f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_principal*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
             f"<b>╚{'═'*22}╝</b>\n"
         )
+
+    # Porcentajes Poisson para el bloque de señales
+    p_local_pct   = prob_poisson_calibrado_local * 100
+    p_empate_pct  = prob_poisson_empate_cal * 100
+    p_visita_pct  = prob_poisson_visita_cal * 100
 
     # Bloque de señales técnicas compacto
     signals_block = (
         f"\n<b>◆ SEÑALES</b>\n"
         f"<code>"
-        f"Poisson  {p_percent:.1f}%  λH {lh:.2f} λA {la:.2f}\n"
+        f"Poisson  🏠 {p_local_pct:.1f}%  🤝 {p_empate_pct:.1f}%  🚩 {p_visita_pct:.1f}%\n"
+        f"λH {lh:.2f}  λA {la:.2f}\n"
+        f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
         f"Mercado  Simple {prob_market_simple*100:.1f}%  Shin {shin_l*100:.1f}%\n"
         f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
         f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}\n"
@@ -803,26 +849,20 @@ async def handle_pronostico(message):
 
     header = decision_block + signals_block + context_block
 
-    # Variables auxiliares para el prompt de riesgo
-    edge_empate_pct = edge_empate * 100
-    edge_visita_pct = edge_visita * 100
-    pick_riesgo_desc = pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"
-    pick_riesgo_cuota_desc = str(pick_riesgo_cuota) if pick_riesgo_cuota else "N/A"
-
     # ============================================================
     # PROMPT ESTRATEGA — Todos los datos disponibles
     # ============================================================
     prompt_e = f"""
-Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en apostar por la victoria del equipo local.
+Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en alguno de los tres resultados posibles del partido.
 
 ═══════════════════════════════════════
 PARTIDO: {m_l} vs {m_v}
 ═══════════════════════════════════════
 
 ── MODELO POISSON + DIXON-COLES ──
-• Prob. victoria local (modelo final): {p_percent:.1f}%
-• Lambda local ajustada (λH): {lh:.2f} goles esperados
-• Lambda visitante ajustada (λA): {la:.2f} goles esperados
+• Prob. victoria local (modelo): {p_local_pct:.1f}%  | λH: {lh:.2f} goles esperados
+• Prob. empate (modelo): {p_empate_pct:.1f}%
+• Prob. victoria visitante (modelo): {p_visita_pct:.1f}%  | λA: {la:.2f} goles esperados
 • Lambda local BASE (sin ajustes): {lh_base:.2f}
 • Lambda visitante BASE (sin ajustes): {la_base:.2f}
 • Factor calibración histórica: ×{factor_calibracion:.2f} {'(modelo sobreestima)' if factor_calibracion < 1 else '(modelo subestima)' if factor_calibracion > 1 else '(sin datos aún)'}
@@ -842,13 +882,16 @@ PARTIDO: {m_l} vs {m_v}
 • Divergencia entre métodos: {divergencia_shin*100:.2f}%
 • Confianza de señal: {shin_confianza}
 • Factor Shin aplicado al edge: ×{shin_factor:.2f}
-• Prob. mercado final (promedio): {prob_market*100:.1f}%
 
-── EDGE Y KELLY ──
-• Edge real (modelo vs mercado): {edge_real*100:.2f}%
-• Edge ajustado (−margen error × factor Shin): {edge_ajustado*100:.2f}%
-• Kelly fraccionado (25%): {round((edge_ajustado/(c_l-1))*0.25*100,2) if edge_ajustado > 0 else 0}%
-• Factor O/U aplicado al stake: ×{ou_factor}
+── EDGE (modelo vs mercado, ajustado) ──
+• Edge local:     {edge_ajustado*100:.2f}%
+• Edge empate:    {edge_empate*100:.2f}%
+• Edge visitante: {edge_visita*100:.2f}%
+
+── PICK SELECCIONADO (mayor edge positivo) ──
+• PICK PRINCIPAL: {pick_final}
+• Nivel: {nivel}
+• Stake Kelly: {stake}% del bankroll
 • Señal Over/Under: {ou_texto}
 • {empate_aviso}
 
@@ -868,31 +911,28 @@ PARTIDO: {m_l} vs {m_v}
 •{serper_txt}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
 
-── PICK DE RIESGO (cuando NO BET en local) ──
-• Edge empate (Poisson vs mercado): {edge_empate_pct:.2f}%
-• Edge visitante (Poisson vs mercado): {edge_visita_pct:.2f}%
-• Pick de riesgo seleccionado: {pick_riesgo_desc}
-• Cuota pick riesgo: {pick_riesgo_cuota_desc}
-• Prob. modelo pick riesgo: {prob_riesgo:.1f}%
-• Stake sugerido pick riesgo: {stake_riesgo}% (cap 1.0%, Kelly×0.25)
+── PICK DE RIESGO ALTERNATIVO ──
+• Pick de riesgo: {pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"}
+• Cuota: {pick_riesgo_cuota if pick_riesgo_cuota else "N/A"}
+• Stake sugerido: {stake_riesgo}% (cap 1.0%, Kelly×0.25)
 
 ═══════════════════════════════════════
 RESULTADO DEL MODELO
 🎯 PICK PRINCIPAL: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
-🎲 PICK RIESGO: {pick_riesgo_desc}
+🎲 PICK RIESGO: {pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"}
 ═══════════════════════════════════════
 
 INSTRUCCIONES PARA TU ANÁLISIS:
-1. Si edge ajustado ≤ 0 en local, declara NO BET local y explica brevemente la razón.
-   - Si hay pick de riesgo válido (edge > 0 en empate o visitante), analiza brevemente por qué existe valor ahí.
-   - Aclara siempre que es una apuesta de mayor riesgo.
-2. Si edge > 0 en local, redacta un análisis de máximo 130 palabras que integre:
-   a) Qué dice el modelo Poisson vs el mercado (edge real y ajustado).
-   b) Si Shin y la normalización simple coinciden o divergen, y qué implica eso.
-   c) Si la forma reciente y la tabla refuerzan o contradicen el pronóstico estadístico.
-   d) Si el H2H en sede favorece al local o al visitante.
+1. El sistema ya evaluó los tres resultados (local, empate, visitante) y eligió el de mayor edge positivo como pick principal.
+   - Si el pick es "No Bet", todos los edges son negativos → no hay valor en ningún resultado.
+   - Si hay pick de riesgo, menciona brevemente por qué puede ser interesante pero aclara su mayor riesgo.
+2. Redacta un análisis de máximo 130 palabras que integre:
+   a) Por qué el pick seleccionado tiene valor (edge modelo vs mercado).
+   b) Si Shin y normalización simple coinciden o divergen, y qué implica.
+   c) Si la forma reciente y la tabla refuerzan o contradicen el pronóstico.
+   d) Si el H2H en sede favorece al resultado elegido.
    e) Si hay bajas relevantes y cómo afectan las lambdas.
    f) Si el O/U confirma o contradice la apuesta.
 3. Sé directo, técnico y conciso. No repitas los números exactos del header, interprétalos.
