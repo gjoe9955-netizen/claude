@@ -147,9 +147,11 @@
             }
         }
     },
-    "last_update": "2026-04-30 18:53:20",
-    "time_decay_lambda": 0.007,
-    "xg_weight": 0.6,
-    "xg_cobertura_pct": 0.0,
-    "xg_source": "understat.com"
+    "last_update": "2026-04-30 19:15:33",
+    "meta": {
+        "partidos_con_xg": 0,
+        "partidos_sin_xg": 330,
+        "xg_weight": 0.6,
+        "time_decay_lambda": 0.007
+    }
 }
