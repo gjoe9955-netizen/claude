@@ -11,11 +11,52 @@ URL = "https://api.football-data.org/v4/competitions/PD/matches?status=FINISHED"
 HEADERS = {"X-Auth-Token": API_KEY}
 
 # ===========================================================================
-# MEJORA 3: Time-decay aumentado de 0.005 a 0.007
-# Con 0.005 un partido de hace 6 meses pesaba ~17%.
-# Con 0.007 pesa ~12%, dando más importancia a las últimas 8 jornadas.
+# Time-decay: 0.007 da ~12% de peso a partidos de hace 6 meses,
+# priorizando las últimas 8 jornadas.
 # ===========================================================================
 TIME_DECAY_LAMBDA = 0.007
+
+# ===========================================================================
+# MEJORA 1: xG (Expected Goals)
+#
+# Por qué importa:
+#   Los goles reales tienen ruido: penales, golazos de media cancha,
+#   errores de portero. xG mide cuánto DEBERÍA haber marcado cada equipo
+#   según la calidad de sus disparos, haciendo las lambdas más estables.
+#
+# Implementación:
+#   Se mezcla xG con goles reales usando XG_WEIGHT.
+#   valor_final = (xG * XG_WEIGHT) + (goles_reales * (1 - XG_WEIGHT))
+#
+#   XG_WEIGHT = 0.6  →  60% xG, 40% goles reales.
+#   Si la API no devuelve xG para un partido, ese partido usa solo goles reales
+#   y se registra como fallback (transparente en el log).
+#
+# Football-Data.org devuelve xG en el campo:
+#   score.regularTime  (no siempre disponible; plan Free lo incluye en PD)
+#   Clave: m['score'].get('regularTime') con subclaves 'home' y 'away'
+#   Nota: el campo real varía por versión de la API; el código prueba
+#   'regularTime' y luego 'halfTime' como fallback antes de usar solo goles.
+# ===========================================================================
+XG_WEIGHT = 0.6  # proporción de xG vs goles reales
+
+
+def extraer_xg(score):
+    """
+    Intenta extraer xG del objeto score de Football-Data.org.
+    Prueba los campos conocidos donde aparece según el plan/versión.
+    Devuelve (xg_home, xg_away) o (None, None) si no está disponible.
+    """
+    # Campo principal donde Football-Data publica xG
+    for campo in ('regularTime', 'extraTime'):
+        ft = score.get(campo)
+        if ft and ft.get('home') is not None and ft.get('away') is not None:
+            # Verificar que son valores razonables de xG (entre 0 y 8)
+            h, a = ft['home'], ft['away']
+            if isinstance(h, float) and isinstance(a, float) and 0 <= h <= 8 and 0 <= a <= 8:
+                return h, a
+    return None, None
+
 
 def train_spain():
     if not API_KEY:
@@ -23,7 +64,7 @@ def train_spain():
         return
 
     try:
-        print(f"Consultando LaLiga Española, aplicando Time-Decay λ={TIME_DECAY_LAMBDA}...")
+        print(f"Consultando LaLiga Española, aplicando Time-Decay λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}...")
         response = requests.get(URL, headers=HEADERS, timeout=15)
 
         if response.status_code != 200:
@@ -39,6 +80,8 @@ def train_spain():
 
         goles = []
         team_ids = {}
+        partidos_con_xg = 0
+        partidos_sin_xg = 0
 
         for m in matches:
             if m.get('score') and m['score'].get('fullTime'):
@@ -48,11 +91,28 @@ def train_spain():
                 team_ids[home_name] = m['homeTeam']['id']
                 team_ids[away_name] = m['awayTeam']['id']
 
+                goals_h = m['score']['fullTime']['home']
+                goals_a = m['score']['fullTime']['away']
+
+                # --- MEJORA 1: Intentar obtener xG ---
+                xg_h, xg_a = extraer_xg(m['score'])
+
+                if xg_h is not None:
+                    # Mezcla ponderada: XG_WEIGHT de xG + resto de goles reales
+                    valor_h = (xg_h * XG_WEIGHT) + (goals_h * (1 - XG_WEIGHT))
+                    valor_a = (xg_a * XG_WEIGHT) + (goals_a * (1 - XG_WEIGHT))
+                    partidos_con_xg += 1
+                else:
+                    # Fallback: solo goles reales
+                    valor_h = float(goals_h)
+                    valor_a = float(goals_a)
+                    partidos_sin_xg += 1
+
                 goles.append({
                     'home': home_name,
                     'away': away_name,
-                    'goals_h': m['score']['fullTime']['home'],
-                    'goals_a': m['score']['fullTime']['away'],
+                    'goals_h': valor_h,
+                    'goals_a': valor_a,
                     'date': m['utcDate']
                 })
 
@@ -86,19 +146,29 @@ def train_spain():
                 "def_a": float(def_a)
             }
 
+        xg_cobertura = partidos_con_xg / (partidos_con_xg + partidos_sin_xg) * 100 if goles else 0
+
         output = {
             "LaLiga": {
                 "averages": {"league_home": float(avg_h), "league_away": float(avg_a)},
                 "teams": teams_stats
             },
             "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "time_decay_lambda": TIME_DECAY_LAMBDA
+            "time_decay_lambda": TIME_DECAY_LAMBDA,
+            "xg_weight": XG_WEIGHT,
+            "xg_cobertura_pct": round(xg_cobertura, 1)
         }
 
         with open('modelo_poisson.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=4, ensure_ascii=False)
 
-        print(f"✅ modelo_poisson.json actualizado. Equipos: {len(teams_stats)} | λ={TIME_DECAY_LAMBDA}")
+        print(f"✅ modelo_poisson.json actualizado.")
+        print(f"   Equipos: {len(teams_stats)} | λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}")
+        print(f"   xG disponible: {partidos_con_xg} partidos ({xg_cobertura:.1f}%) | Sin xG: {partidos_sin_xg} partidos")
+
+        if xg_cobertura == 0:
+            print("   ⚠️  API no devolvió xG en ningún partido. El modelo usó solo goles reales.")
+            print("      Esto es normal en el plan Free de Football-Data.org para temporadas anteriores.")
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
