@@ -26,9 +26,9 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 SERPER_KEY = os.getenv('SERPER_API_KEY') 
 
 OFFSET_JUAREZ = -6
-URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/entrenador2/main/modelo_poisson.json"
+URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
 REPO_OWNER = "gjoe9955-netizen"
-REPO_NAME = "entrenador2"
+REPO_NAME = "claude"
 FILE_PATH = "historial.json"
 
 bot = AsyncTeleBot(TOKEN)
