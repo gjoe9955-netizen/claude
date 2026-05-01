@@ -12,6 +12,12 @@ from understat import Understat
 # Fuentes de datos:
 #   - Football-Data.org → estructura de partidos, IDs de equipos, resultados
 #   - Understat.com     → xG gratis via librería understat (aiohttp)
+#
+# Correcciones v2:
+#   1. Carga temporada actual + anterior para cubrir partidos de inicio de temporada
+#   2. Cruce por fecha+equipos en lugar de solo nombres (evita falsos negativos)
+#   3. asyncio seguro: usa nest_asyncio si hay event loop activo (Railway/GitHub Actions)
+#   4. Levante UD y Real Oviedo no existen en Understat LaLiga → usan solo goles reales
 # ===========================================================================
 
 API_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
@@ -21,31 +27,64 @@ HEADERS = {"X-Auth-Token": API_KEY}
 TIME_DECAY_LAMBDA = 0.007
 XG_WEIGHT = 0.6
 
+# Equipos que NO están en Understat LaLiga (Segunda División ascendidos, etc.)
+# Para estos se usan solo goles reales sin penalización
+EQUIPOS_SIN_UNDERSTAT = {"levante", "oviedo"}
+
 
 # ===========================================================================
-# UNDERSTAT — librería oficial (pip install understat aiohttp)
+# UNDERSTAT — carga dos temporadas para máxima cobertura
 # ===========================================================================
 
-async def _fetch_xg_async(temporada):
+async def _fetch_xg_dos_temporadas(temporada_actual: int):
+    """Descarga partidos de la temporada actual y la anterior en paralelo."""
     async with aiohttp.ClientSession() as session:
         understat = Understat(session)
-        partidos = await understat.get_league_results("La_liga", temporada)
-    return partidos
+        resultados = await asyncio.gather(
+            understat.get_league_results("La_liga", temporada_actual),
+            understat.get_league_results("La_liga", temporada_actual - 1),
+            return_exceptions=True
+        )
+    return resultados
 
 
-def obtener_xg_understat():
+def _run_async(coro):
+    """Ejecuta una coroutine de forma segura en cualquier entorno."""
+    try:
+        loop = asyncio.get_running_loop()
+        # Si hay loop activo (Railway, Jupyter, etc.) usar nest_asyncio
+        import nest_asyncio
+        nest_asyncio.apply()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        # No hay loop activo — comportamiento normal
+        return asyncio.run(coro)
+
+
+def obtener_xg_understat() -> dict:
     """
-    Obtiene xG de LaLiga usando la librería understat.
-    Devuelve dict: {(home_norm, away_norm): (xg_h, xg_a)}
+    Obtiene xG de LaLiga desde Understat para dos temporadas.
+    Clave del dict: (fecha_iso, home_norm, away_norm) → (xg_h, xg_a)
+    Esto permite cruce exacto por fecha + equipos, eliminando falsos negativos.
     """
     xg_map = {}
 
     anio = datetime.now().year
     mes = datetime.now().month
-    temporada = anio - 1 if mes < 8 else anio
+    temporada_actual = anio - 1 if mes < 8 else anio
 
     try:
-        partidos = asyncio.run(_fetch_xg_async(temporada))
+        resultados = _run_async(_fetch_xg_dos_temporadas(temporada_actual))
+    except Exception as e:
+        print(f"   ⚠️  Error Understat async: {e}. Solo goles reales.")
+        return xg_map
+
+    total = 0
+    for temporada_idx, partidos in enumerate(resultados):
+        temporada = temporada_actual - temporada_idx
+        if isinstance(partidos, Exception):
+            print(f"   ⚠️  Error temporada {temporada}: {partidos}")
+            continue
 
         for p in partidos:
             xg_data = p.get('xG', {})
@@ -58,16 +97,20 @@ def obtener_xg_understat():
                 continue
             if not (0 <= xg_h <= 8 and 0 <= xg_a <= 8):
                 continue
+
             home = p.get('h', {}).get('title', '').strip().lower()
             away = p.get('a', {}).get('title', '').strip().lower()
-            if home and away:
-                xg_map[(home, away)] = (xg_h, xg_a)
+            fecha_raw = p.get('datetime', '')
+            fecha_iso = fecha_raw[:10] if fecha_raw else ''  # YYYY-MM-DD
 
-        print(f"   ✅ Understat ({temporada}): {len(xg_map)} partidos con xG.")
+            if home and away and fecha_iso:
+                # Clave primaria: fecha + equipos (cruce exacto)
+                xg_map[(fecha_iso, home, away)] = (xg_h, xg_a)
+                # Clave secundaria: solo equipos (fallback si fecha no coincide exactamente)
+                xg_map.setdefault(('', home, away), (xg_h, xg_a))
+                total += 1
 
-    except Exception as e:
-        print(f"   ⚠️  Error Understat: {e}. Solo goles reales.")
-
+    print(f"   ✅ Understat ({temporada_actual} + {temporada_actual-1}): {total} partidos con xG cargados.")
     return xg_map
 
 
@@ -77,7 +120,6 @@ def obtener_xg_understat():
 # ===========================================================================
 
 NOMBRE_FD_A_US = {
-    # --- Nombres actuales Football-Data 2025/26 ---
     "real madrid cf"                : "real madrid",
     "fc barcelona"                  : "barcelona",
     "club atlético de madrid"       : "atletico madrid",
@@ -104,9 +146,9 @@ NOMBRE_FD_A_US = {
     "cd leganés"                    : "leganes",
     "cd leganes"                    : "leganes",
     "elche cf"                      : "elche",
-    "levante ud"                    : "levante",
-    "real oviedo"                   : "oviedo",
-    # --- Aliases temporadas anteriores ---
+    "levante ud"                    : "levante",        # sin Understat
+    "real oviedo"                   : "oviedo",         # sin Understat
+    # Aliases temporadas anteriores
     "atletico de madrid"            : "atletico madrid",
     "ud girona fc"                  : "girona",
     "ud almería"                    : "almeria",
@@ -115,7 +157,7 @@ NOMBRE_FD_A_US = {
     "real racing club de santander" : "racing santander",
 }
 
-def normalizar_nombre(nombre_fd):
+def normalizar_nombre(nombre_fd: str) -> str:
     key = nombre_fd.strip().lower()
     return NOMBRE_FD_A_US.get(key, key)
 
@@ -126,13 +168,12 @@ def normalizar_nombre(nombre_fd):
 
 def train_spain():
     if not API_KEY:
-        print("❌ ERROR: No se encontró la API KEY.")
+        print("❌ ERROR: No se encontró FOOTBALL_DATA_API_KEY.")
         return
 
     try:
         print(f"Consultando LaLiga | λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}...")
-
-        print("Descargando xG desde Understat...")
+        print("Descargando xG desde Understat (2 temporadas)...")
         xg_understat = obtener_xg_understat()
 
         response = requests.get(URL, headers=HEADERS, timeout=15)
@@ -149,7 +190,8 @@ def train_spain():
         team_ids = {}
         partidos_con_xg = 0
         partidos_sin_xg = 0
-        equipos_sin_xg = set()  # DEBUG
+        partidos_sin_understat = 0
+        equipos_sin_xg = set()
 
         for m in matches:
             if not (m.get('score') and m['score'].get('fullTime')):
@@ -165,19 +207,31 @@ def train_spain():
 
             home_us = normalizar_nombre(home_name)
             away_us = normalizar_nombre(away_name)
-            xg_data = xg_understat.get((home_us, away_us))
 
-            if xg_data:
-                xg_h, xg_a = xg_data
-                valor_h = (xg_h * XG_WEIGHT) + (goals_h * (1 - XG_WEIGHT))
-                valor_a = (xg_a * XG_WEIGHT) + (goals_a * (1 - XG_WEIGHT))
-                partidos_con_xg += 1
-            else:
+            # Equipos conocidos sin cobertura en Understat → solo goles reales, sin log de debug
+            if home_us in EQUIPOS_SIN_UNDERSTAT or away_us in EQUIPOS_SIN_UNDERSTAT:
                 valor_h = float(goals_h)
                 valor_a = float(goals_a)
-                partidos_sin_xg += 1
-                equipos_sin_xg.add(f"{m['utcDate'][:10]} | {home_name} vs {away_name} (FD: {home_us} vs {away_us})")  # DEBUG
-                
+                partidos_sin_understat += 1
+            else:
+                # Cruce primario: fecha + equipos
+                fecha_iso = m['utcDate'][:10]
+                xg_data = xg_understat.get((fecha_iso, home_us, away_us))
+
+                # Fallback: solo equipos (sin fecha), útil si hay desfase de 1 día UTC
+                if not xg_data:
+                    xg_data = xg_understat.get(('', home_us, away_us))
+
+                if xg_data:
+                    xg_h, xg_a = xg_data
+                    valor_h = (xg_h * XG_WEIGHT) + (goals_h * (1 - XG_WEIGHT))
+                    valor_a = (xg_a * XG_WEIGHT) + (goals_a * (1 - XG_WEIGHT))
+                    partidos_con_xg += 1
+                else:
+                    valor_h = float(goals_h)
+                    valor_a = float(goals_a)
+                    partidos_sin_xg += 1
+                    equipos_sin_xg.add(f"{fecha_iso} | {home_name} vs {away_name} (US: {home_us} vs {away_us})")
 
             goles.append({
                 'home': home_name,
@@ -187,9 +241,8 @@ def train_spain():
                 'date': m['utcDate']
             })
 
-        # DEBUG — mostrar equipos sin xG para ajustar mapeo
         if equipos_sin_xg:
-            print(f"   🔍 Equipos sin xG encontrado:")
+            print(f"   🔍 Partidos sin xG (revisar mapeo):")
             for e in sorted(equipos_sin_xg):
                 print(f"      - {e}")
 
@@ -229,6 +282,7 @@ def train_spain():
             "meta": {
                 "partidos_con_xg": partidos_con_xg,
                 "partidos_sin_xg": partidos_sin_xg,
+                "partidos_sin_understat": partidos_sin_understat,
                 "xg_weight": XG_WEIGHT,
                 "time_decay_lambda": TIME_DECAY_LAMBDA
             }
@@ -238,10 +292,14 @@ def train_spain():
             json.dump(output, f, indent=4, ensure_ascii=False)
 
         print(f"✅ modelo_poisson.json actualizado.")
-        print(f"   Equipos: {len(teams_stats)} | Con xG: {partidos_con_xg} | Sin xG: {partidos_sin_xg}")
+        print(f"   Equipos: {len(teams_stats)}")
+        print(f"   Con xG:          {partidos_con_xg}")
+        print(f"   Sin xG (mapeo):  {partidos_sin_xg}")
+        print(f"   Sin Understat:   {partidos_sin_understat} (Levante/Oviedo — normal)")
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
+
 
 if __name__ == "__main__":
     train_spain()
