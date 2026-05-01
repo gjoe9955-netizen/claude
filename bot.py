@@ -885,16 +885,23 @@ async def handle_pronostico(message):
     edge_visita     = (prob_poisson_visita_cal - prob_market_v - margen_error) * shin_factor
 
     edge_ajustado = edge_local_raw
+
+    # Filtro simétrico: cuota en zona de falso valor (1.90-2.10) con edge marginal → anular
     if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
-    if c_e < 3.0 and edge_ajustado > 0:
-        edge_ajustado *= 0.80
-        empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge local reducido 20%"
-    else:
-        empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
-
+    if 1.90 <= c_e <= 2.10 and edge_empate < 0.02:
+        edge_empate = -0.001
     if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
         edge_visita = -0.001
+
+    # Cuota de empate baja → partido equilibrado → cautela en los 3 resultados por igual
+    if c_e < 3.0:
+        edge_ajustado *= 0.80
+        edge_empate   *= 0.80
+        edge_visita   *= 0.80
+        empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge reducido 20% en los 3 resultados"
+    else:
+        empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
 
     candidatos = []
     if edge_ajustado > 0:
