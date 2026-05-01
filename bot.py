@@ -36,6 +36,11 @@ bot = AsyncTeleBot(TOKEN)
 COOLDOWN = {}
 COOLDOWN_MINUTOS = 30
 
+# ── CONSTANTES DE VENTAJA DE CAMPO (FIX V11) ────────────────
+HOME_ADVANTAGE_FACTOR = 1.10   # Local marca ~10% más en LaLiga (histórico)
+HOME_ELO_BONUS        = 50     # Ventaja de campo en puntos Elo (estándar FIFA)
+DC_RHO                = -0.13  # Dixon-Coles rho
+
 # --- Cache del modelo en memoria ---
 _MODELO_CACHE = {"data": None, "ts": None}
 CACHE_TTL_SEGUNDOS = 3600
@@ -112,7 +117,6 @@ async def obtener_contexto_real(l_q, v_q):
         if not res:
             return "No se encontraron noticias recientes.", 1.0, 1.0
 
-        # Leer contenido completo de las top 2 URLs con Jina en paralelo
         urls_top = [item['link'] for item in res[:2] if item.get('link')]
         contenidos_jina = await asyncio.gather(*[fetch_jina(u) for u in urls_top])
 
@@ -124,7 +128,6 @@ async def obtener_contexto_real(l_q, v_q):
             snippet = item.get('snippet', '')
             titulo = item.get('title', '')
 
-            # Si tenemos contenido Jina para este resultado, usarlo en lugar del snippet
             contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
             texto_analisis = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
 
@@ -240,11 +243,6 @@ async def ejecutar_ia(rol, prompt):
 
 # --- Núcleo Estadístico y APIs ---
 async def obtener_datos_mercado(equipo_l):
-    """
-    Promedia cuotas de múltiples casas de apuestas (consenso de mercado).
-    Prioriza casas con menor margen (más eficientes): Pinnacle primero, luego resto.
-    Devuelve (cuota_local, cuota_empate, cuota_visita, check_odds, casas_usadas, rango_l, rango_v).
-    """
     if not ODDS_API_KEY: return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
     CASAS_PREFERIDAS = {
@@ -297,7 +295,6 @@ async def obtener_datos_mercado(equipo_l):
 
             rango_l = (round(min(ol_list), 3), round(max(ol_list), 3))
             rango_v = (round(min(ov_list), 3), round(max(ov_list), 3))
-            rango_e = (round(min(oe_list), 3), round(max(oe_list), 3))
 
             logging.info(
                 f"[Odds] Consenso de {len(casas_usadas)} casas: "
@@ -378,19 +375,13 @@ async def api_football_call(endpoint):
 
 
 # ============================================================
-# H2H desde football-data.org — sede-corregido
+# Cache de partidos FINISHED
 # ============================================================
-
-# Cache de partidos FINISHED de la temporada actual
 _PARTIDOS_FD_CACHE = {"data": None, "ts": None}
-PARTIDOS_FD_TTL = 3600  # 1 hora
+PARTIDOS_FD_TTL = 3600
 
 
 async def obtener_partidos_finished() -> list:
-    """
-    Descarga y cachea todos los partidos FINISHED de LaLiga
-    desde football-data.org. TTL: 1 hora.
-    """
     ahora = datetime.now(timezone.utc)
     if (
         _PARTIDOS_FD_CACHE["data"] is not None and
@@ -412,11 +403,15 @@ async def obtener_partidos_finished() -> list:
     return _PARTIDOS_FD_CACHE["data"] or []
 
 
+# ============================================================
+# FIX 2 — H2H sede-corregido: umbral reducido a 1 partido
+# ============================================================
 async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombre_visita: str):
     """
-    Calcula H2H desde los partidos FINISHED de football-data.org,
-    filtrando solo los partidos donde id_local jugó como local
-    contra id_visita. Sede-corregido.
+    Calcula H2H desde los partidos FINISHED de football-data.org.
+    Prioriza partidos donde id_local jugó exactamente como local.
+    Umbral reducido a 1 (antes 3) porque en LaLiga solo hay
+    1 enfrentamiento por sede por temporada.
     Devuelve (texto, check_h2h, home_wins, away_wins, total).
     """
     partidos = await obtener_partidos_finished()
@@ -424,16 +419,18 @@ async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombr
     if not partidos:
         return "H2H: Sin datos de partidos.", False, 0, 0, 0
 
+    # Partidos exactos: id_local como local, id_visita como visitante
     partidos_sede = [
         m for m in partidos
         if m["homeTeam"]["id"] == id_local and m["awayTeam"]["id"] == id_visita
     ]
 
-    if len(partidos_sede) < 3:
+    # FIX: umbral 1 en vez de 3
+    if len(partidos_sede) < 1:
         partidos_cualquier_sede = [
             m for m in partidos
             if (
-                (m["homeTeam"]["id"] == id_local and m["awayTeam"]["id"] == id_visita) or
+                (m["homeTeam"]["id"] == id_local  and m["awayTeam"]["id"] == id_visita) or
                 (m["homeTeam"]["id"] == id_visita and m["awayTeam"]["id"] == id_local)
             )
         ]
@@ -449,7 +446,7 @@ async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombr
 
     l, v, e = 0, 0, 0
     for m in partidos_sede:
-        winner = m["score"].get("winner")
+        winner  = m["score"].get("winner")
         if not winner:
             continue
         home_id = m["homeTeam"]["id"]
@@ -470,8 +467,8 @@ async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombr
     if total == 0:
         return "H2H: Sin resultados válidos.", False, 0, 0, 0
 
-    sede_txt = "en casa" if modo_sede else "cualquier sede"
-    texto = f"H2H ({sede_txt} · {total} partidos)"
+    sede_txt = "en esta sede" if modo_sede else "cualquier sede"
+    texto    = f"H2H ({sede_txt} · {total} partidos)"
     logging.info(f"[H2H-FD] {nombre_local} vs {nombre_visita}: L={l} V={v} E={e} ({sede_txt})")
     return texto, True, l, v, total
 
@@ -600,8 +597,6 @@ def calcular_factor_tabla(pos_local, pos_visita, pts_local, pts_visita):
 
 
 # --- Dixon-Coles: corrección para marcadores bajos ---
-DC_RHO = -0.13
-
 def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
     if x == 0 and y == 0:
         return 1.0 - (lh * la * rho)
@@ -615,20 +610,13 @@ def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
 
 
 # ============================================================
-# Elo Dinámico — solo football-data.org (temporada actual)
+# Cache Elo
 # ============================================================
 _ELO_CACHE = {"data": None, "ts": None}
-ELO_CACHE_TTL = 3600  # 1 hora
+ELO_CACHE_TTL = 3600
 
 
 async def calcular_elo_equipos(tabla: dict) -> dict:
-    """
-    Calcula ratings Elo para todos los equipos de LaLiga usando
-    los partidos FINISHED de la temporada actual (football-data.org).
-    Reutiliza el cache de obtener_partidos_finished() — sin request extra.
-    K=32, Elo base=1500. Resultado cacheado 1 hora.
-    Devuelve dict {team_id: elo_rating}.
-    """
     ahora = datetime.now(timezone.utc)
     if (
         _ELO_CACHE["data"] and _ELO_CACHE["ts"] and
@@ -683,35 +671,103 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
     return elos
 
 
+# ============================================================
+# FIX 1 — calcular_factor_elo: añade HOME_ELO_BONUS al local
+# ============================================================
 def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
     """
     Convierte diferencia Elo en factor multiplicador para λH y λA.
-    Máximo ajuste: ±8% (equivalente a ~200 puntos de diferencia).
+    Aplica HOME_ELO_BONUS (+50 pts) al local como ventaja de campo explícita.
+    Máximo ajuste: ±8% (~200 puntos de diferencia efectiva).
     """
     MAX_AJUSTE = 0.08
-    MAX_DIFF = 200.0
+    MAX_DIFF   = 200.0
 
-    diff = elo_local - elo_visita
+    # Bonus de campo solo en el Elo, no en las lambdas directamente
+    elo_local_ajustado = elo_local + HOME_ELO_BONUS
+
+    diff       = elo_local_ajustado - elo_visita
     intensidad = max(-1.0, min(diff / MAX_DIFF, 1.0))
-    ajuste = MAX_AJUSTE * intensidad
+    ajuste     = MAX_AJUSTE * intensidad
 
     factor_lh = round(1.0 + ajuste, 4)
     factor_la = round(1.0 - ajuste, 4)
 
     if abs(ajuste) < 0.01:
-        texto = f"Elo ⚖️ Equilibrado ({elo_local:.0f} vs {elo_visita:.0f})"
+        texto = f"Elo ⚖️ Equilibrado ({elo_local:.0f}+50 vs {elo_visita:.0f})"
     elif diff > 0:
-        texto = f"Elo 📈 Local superior ({elo_local:.0f} vs {elo_visita:.0f}, +{ajuste*100:.1f}% lh)"
+        texto = f"Elo 📈 Local superior ({elo_local:.0f}+50 vs {elo_visita:.0f}, +{ajuste*100:.1f}% lh)"
     else:
-        texto = f"Elo 📉 Visita superior ({elo_local:.0f} vs {elo_visita:.0f}, +{abs(ajuste)*100:.1f}% la)"
+        texto = f"Elo 📉 Visita superior ({elo_local:.0f}+50 vs {elo_visita:.0f}, +{abs(ajuste)*100:.1f}% la)"
 
     return factor_lh, factor_la, texto
 
 
+# ============================================================
+# FIX 3 — calcular_lambdas_base: stats neutras + HOME_ADVANTAGE_FACTOR
+# ============================================================
+def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
+    """
+    Calcula lambdas base sin doble conteo de ventaja de campo.
+    Usa stats globales/neutras del equipo. La ventaja de campo
+    queda exclusivamente en HOME_ADVANTAGE_FACTOR (lambda) y
+    HOME_ELO_BONUS (Elo), sin superposición.
+
+    Jerarquía de stats del JSON:
+      1. 'att' / 'def'         → stats globales neutras (ideal)
+      2. promedio att_h+att_a  → si no hay globales
+      3. fallback a att_h/att_a → último recurso
+    """
+    # Ataque local neutro
+    if 'att' in l_s:
+        att_local = l_s['att']
+    elif 'att_h' in l_s and 'att_a' in l_s:
+        att_local = (l_s['att_h'] + l_s['att_a']) / 2
+    else:
+        att_local = l_s.get('att_h', 1.0)
+
+    # Defensa local neutra
+    if 'def' in l_s:
+        def_local = l_s['def']
+    elif 'def_h' in l_s and 'def_a' in l_s:
+        def_local = (l_s['def_h'] + l_s['def_a']) / 2
+    else:
+        def_local = l_s.get('def_h', 1.0)
+
+    # Ataque visitante neutro
+    if 'att' in v_s:
+        att_visita = v_s['att']
+    elif 'att_h' in v_s and 'att_a' in v_s:
+        att_visita = (v_s['att_h'] + v_s['att_a']) / 2
+    else:
+        att_visita = v_s.get('att_a', 1.0)
+
+    # Defensa visitante neutra
+    if 'def' in v_s:
+        def_visita = v_s['def']
+    elif 'def_h' in v_s and 'def_a' in v_s:
+        def_visita = (v_s['def_h'] + v_s['def_a']) / 2
+    else:
+        def_visita = v_s.get('def_a', 1.0)
+
+    # Promedio de liga neutro
+    if 'league_avg' in avg:
+        avg_neutro = avg['league_avg']
+    else:
+        avg_neutro = (avg.get('league_home', 1.5) + avg.get('league_away', 1.2)) / 2
+
+    # Lambdas base: solo HOME_ADVANTAGE_FACTOR da ventaja de campo aquí
+    # El Elo añade el ajuste INDIVIDUAL por calidad relativa (sin duplicar)
+    lh_base = att_local  * def_visita * avg_neutro * HOME_ADVANTAGE_FACTOR
+    la_base = att_visita * def_local  * avg_neutro
+
+    return lh_base, la_base
+
+
+# ============================================================
+# Shin y helpers
+# ============================================================
 def calcular_shin(odds_l, odds_e, odds_v):
-    """
-    Método Shin (1993): estima probabilidades verdaderas desde cuotas.
-    """
     p_raw = [1 / odds_l, 1 / odds_e, 1 / odds_v]
     n = len(p_raw)
     overround = sum(p_raw)
@@ -763,9 +819,6 @@ def interpretar_shin(divergencia, z):
     return confianza, factor, z_txt
 
 
-# ============================================================
-
-# --- Lógica de validación unificada ---
 PICKS_VOID = ["no bet", "no apostar", "no apostar (sin valor)", "sin valor"]
 
 def evaluar_resultado(pick, partido, home_name, away_name, winner):
@@ -780,7 +833,10 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
         return "✅ WIN"
     return "❌ LOSS"
 
-# --- Comando Principal: Pronóstico V11 ---
+
+# ============================================================
+# Comando Principal: Pronóstico V11 (con los 3 fixes aplicados)
+# ============================================================
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
     if not SISTEMA_IA["estratega"]["nodo"]:
@@ -829,12 +885,13 @@ async def handle_pronostico(message):
 
     elos = await calcular_elo_equipos(tabla)
 
-    # --- PASO 1: Lambdas base desde Poisson ---
+    # --- PASO 1: Lambdas base CORREGIDAS (FIX 3) ---
+    # Stats neutras + HOME_ADVANTAGE_FACTOR exclusivo
+    # Sin doble conteo con Elo ni avg_home
     avg = full_data[liga]['averages']
-    lh_base = l_s['att_h'] * v_s['def_a'] * avg['league_home']
-    la_base = v_s['att_a'] * l_s['def_h'] * avg['league_away']
+    lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
 
-    # --- PASO 2: Ajuste H2H (sede-corregido) ---
+    # --- PASO 2: Ajuste H2H (sede-corregido, FIX 2) ---
     factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
 
     # --- PASO 3: Ajuste forma reciente ---
@@ -850,12 +907,12 @@ async def handle_pronostico(message):
             t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
         )
 
-    # --- PASO 4b: Ajuste Elo dinámico ---
+    # --- PASO 4b: Ajuste Elo dinámico (FIX 1: incluye HOME_ELO_BONUS) ---
     factor_lh_elo, factor_la_elo, elo_texto = 1.0, 1.0, "Elo: Sin datos"
     if elos and id_l in elos and id_v in elos:
         factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
 
-    # --- PASO 5: Combinar todos los factores sobre las lambdas ---
+    # --- PASO 5: Combinar todos los factores ---
     lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
     la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
 
@@ -870,7 +927,7 @@ async def handle_pronostico(message):
     # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 8: Normalización simple + Shin (validación cruzada) ---
+    # --- PASO 8: Normalización simple + Shin ---
     overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
     prob_market_simple = (1 / c_l) / overround
 
@@ -916,7 +973,6 @@ async def handle_pronostico(message):
 
     edge_ajustado = edge_local_raw
 
-    # Filtro simétrico: cuota en zona de falso valor (1.90-2.10) con edge marginal → anular
     if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
     if 1.90 <= c_e <= 2.10 and edge_empate < 0.02:
@@ -924,7 +980,6 @@ async def handle_pronostico(message):
     if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
         edge_visita = -0.001
 
-    # Cuota de empate baja → partido equilibrado → cautela en los 3 resultados por igual
     if c_e < 3.0:
         edge_ajustado *= 0.80
         edge_empate   *= 0.80
@@ -952,13 +1007,13 @@ async def handle_pronostico(message):
         candidatos.sort(key=lambda c: c[1], reverse=True)
         tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
 
-        kelly_full       = edge_principal / (cuota_pick - 1)
+        kelly_full        = edge_principal / (cuota_pick - 1)
         kelly_fraccionado = kelly_full * 0.25
-        stake_base       = round(kelly_fraccionado * 100, 2)
-        stake            = round(stake_base * ou_factor, 2)
-        stake            = max(0.25, min(stake, 3.0))
-        pick_final       = nombre_pick
-        p_percent        = prob_pick_pct
+        stake_base        = round(kelly_fraccionado * 100, 2)
+        stake             = round(stake_base * ou_factor, 2)
+        stake             = max(0.25, min(stake, 3.0))
+        pick_final        = nombre_pick
+        p_percent         = prob_pick_pct
 
         if stake < 0.75:
             nivel = "BRONCE 🥉"
@@ -981,12 +1036,12 @@ async def handle_pronostico(message):
                 nivel_riesgo = "RIESGO ALTO 🔴"
     else:
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
-        ou_factor  = 1.0
-        tipo_pick  = "ninguno"
-        cuota_pick = 0
+        ou_factor     = 1.0
+        tipo_pick     = "ninguno"
+        cuota_pick    = 0
         prob_pick_pct = 0
         edge_principal = 0
-        nombre_pick = "No Bet"
+        nombre_pick   = "No Bet"
 
     # --- Guardado en Historial ---
     fecha_hoy = (datetime.now(timezone.utc) + timedelta(hours=OFFSET_JUAREZ)).strftime('%Y-%m-%d %H:%M')
@@ -1045,7 +1100,7 @@ async def handle_pronostico(message):
             COOLDOWN[clave_partido] = ahora
             asyncio.create_task(task_github())
 
-    # --- Construir textos resumen de ajustes ---
+    # --- Construir textos resumen ---
     calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
     h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
     serper_txt = ""
@@ -1054,6 +1109,7 @@ async def handle_pronostico(message):
     if not serper_txt: serper_txt = " Sin bajas detectadas"
 
     tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
+
     if pick_final == "No Bet":
         if pick_riesgo_nombre:
             decision_block = (
@@ -1176,7 +1232,7 @@ PARTIDO: {m_l} vs {m_v}
 ── POSICIÓN EN TABLA ──
 • {tabla_texto}
 
-── ELO DINÁMICO (temporada actual) ──
+── ELO DINÁMICO (temporada actual, con bonus campo +50 pts) ──
 • {elo_texto}
 • Factor Elo local: ×{factor_lh_elo:.4f} | Factor Elo visita: ×{factor_la_elo:.4f}
 • Elo local: {elos.get(id_l, 'N/A') if isinstance(elos.get(id_l), str) else f"{elos.get(id_l, 0):.0f}"} pts | Elo visita: {elos.get(id_v, 'N/A') if isinstance(elos.get(id_v), str) else f"{elos.get(id_v, 0):.0f}"} pts
@@ -1241,7 +1297,10 @@ INSTRUCCIONES PARA TU ANÁLISIS:
 
     await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode='HTML')
 
-# --- Comandos Adicionales ---
+
+# ============================================================
+# Comandos Adicionales (sin cambios)
+# ============================================================
 
 @bot.message_handler(commands=['stats'])
 async def cmd_stats(message):
@@ -1331,7 +1390,8 @@ async def cmd_historial(message):
         for r_item in historial[-10:]:
             txt += f"📅 <code>{r_item['fecha']}</code>\n⚽ <b>{r_item['partido']}</b>\n🎯 Pick: <code>{r_item['pick']}</code> | {r_item['status']}\n{'—'*15}\n"
         await bot.reply_to(message, txt, parse_mode='HTML')
-    except: await bot.reply_to(message, "❌ Error al leer historial.")
+    except:
+        await bot.reply_to(message, "❌ Error al leer historial.")
 
 @bot.message_handler(commands=['validar'])
 async def cmd_validar(message):
