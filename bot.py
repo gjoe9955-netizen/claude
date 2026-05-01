@@ -410,16 +410,6 @@ async def obtener_partidos_finished() -> list:
 # H2H — lee desde la sección "h2h" del modelo_poisson.json
 # ============================================================
 def obtener_h2h_json(id_local: int, id_visita: int, full_data: dict) -> tuple:
-    """
-    Lee H2H desde la sección 'h2h' del modelo_poisson.json (ya en cache).
-    Devuelve (texto_fuente, check_h2h, home_wins, away_wins, total, fuente_label)
-
-    fuente_label posibles valores:
-      "Understat 2T"  → 6+ partidos con xG (dos temporadas completas)
-      "Understat 1T"  → 1-5 partidos con xG (una temporada parcial)
-      "{n}p sin xG"   → partidos sin xG disponible
-      "sin_datos"     → sin enfrentamientos registrados
-    """
     liga = next(iter(full_data))
     h2h_section = full_data[liga].get("h2h", {})
     clave = f"{id_local}_{id_visita}"
@@ -442,7 +432,6 @@ def obtener_h2h_json(id_local: int, id_visita: int, full_data: dict) -> tuple:
         else:
             empates += 1
 
-    # Etiqueta de fuente para el indicador
     if temporadas_con_xg >= 6:
         fuente_label = "Understat 2T"
     elif temporadas_con_xg >= 1:
@@ -465,13 +454,12 @@ def calcular_factor_h2h(home_wins, away_wins, total_partidos):
     if total_partidos < 1:
         return 1.0, 1.0, "H2H: Sin datos"
 
-    # Si hay menos de 5 partidos, el H2H es demasiado ruidoso
     if total_partidos < 5:
         return 1.0, 1.0, f"H2H ⚖️ Muestra insuficiente ({total_partidos}p < 5)"
 
     tasa_local  = home_wins / total_partidos
     tasa_visita = away_wins / total_partidos
-    MAX_AJUSTE  = 0.04  # ← CAMBIADO: era 0.08 (reduce el peso del H2H)
+    MAX_AJUSTE  = 0.04
 
     if tasa_local > 0.60:
         intensidad = min((tasa_local - 0.60) / 0.40, 1.0)
@@ -804,13 +792,8 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
 
 # ============================================================
 # CAMBIO 2: Helper para calcular marcadores más probables (Poisson)
-# Usado en NO BET para generar pick de riesgo estadístico real
 # ============================================================
 def calcular_marcadores_probables(lh: float, la: float, top_n: int = 3) -> list:
-    """
-    Devuelve los top_n marcadores más probables según Poisson + Dixon-Coles.
-    Cada elemento es ((goles_local, goles_visita), probabilidad).
-    """
     resultados = []
     for x in range(6):
         for y in range(6):
@@ -869,23 +852,18 @@ async def handle_pronostico(message):
         obtener_posiciones_tabla()
     )
 
-    # H2H desde JSON (síncrono, ya está en cache de memoria)
     h2h, check_h2h, home_wins, away_wins, total_h2h, fuente_h2h = obtener_h2h_json(id_l, id_v, full_data)
 
     elos = await calcular_elo_equipos(tabla)
 
-    # --- PASO 1: Lambdas base ---
     avg = full_data[liga]['averages']
     lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
 
-    # --- PASO 2: Ajuste H2H ---
     factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
 
-    # --- PASO 3: Ajuste forma reciente ---
     factor_lh_forma = forma_local_atk
     factor_la_forma = forma_visita_atk
 
-    # --- PASO 4: Ajuste tabla ---
     factor_lh_tabla, factor_la_tabla, tabla_texto = 1.0, 1.0, "Tabla: Sin datos"
     if tabla and id_l in tabla and id_v in tabla:
         t_l = tabla[id_l]
@@ -894,14 +872,12 @@ async def handle_pronostico(message):
             t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
         )
 
-    # --- PASO 4b: Ajuste Elo dinámico ---
     factor_lh_elo, factor_la_elo, elo_texto = 1.0, 1.0, "Elo: Sin datos"
     if elos and id_l in elos and id_v in elos:
         factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
 
     # ============================================================
-    # CAMBIO 3: Suavizado de lambdas (era multiplicación directa)
-    # Reduce overfitting cuando los factores se acumulan
+    # CAMBIO 3: Suavizado de lambdas
     # ============================================================
     factor_total_lh = factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
     factor_total_la = factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
@@ -909,7 +885,6 @@ async def handle_pronostico(message):
     lh = lh_base * (1 + (factor_total_lh - 1) * 0.7)
     la = la_base * (1 + (factor_total_la - 1) * 0.7)
 
-    # --- PASO 6: Probabilidad Poisson 7x7 + Dixon-Coles ---
     prob_poisson = 0
     for x in range(7):
         for y in range(7):
@@ -917,10 +892,8 @@ async def handle_pronostico(message):
             if x > y:
                 prob_poisson += p
 
-    # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 8: Normalización simple + Shin ---
     overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
     prob_simple_l = (1 / c_l) / overround
     prob_simple_e = (1 / c_e) / overround
@@ -940,10 +913,8 @@ async def handle_pronostico(message):
     p_win = (prob_poisson_calibrado * 0.90) + (prob_market_l * 0.10)
     p_percent = p_win * 100
 
-    # --- PASO 9: Over/Under ---
     ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
-    # --- PASO 10: Probabilidades Poisson para los 3 resultados ---
     prob_poisson_empate = 0
     prob_poisson_visita = 0
     for x in range(7):
@@ -962,9 +933,8 @@ async def handle_pronostico(message):
 
     # ============================================================
     # CAMBIO 4: Margen de error dinámico según Shin z
-    # A mayor incertidumbre (z alto), mayor margen requerido
     # ============================================================
-    margen_error = 0.003 + (shin_z * 0.02)  # ← CAMBIADO: era 0.005 fijo
+    margen_error = 0.003 + (shin_z * 0.02)
 
     edge_local_raw  = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
     edge_empate     = (prob_poisson_empate_cal - prob_market_e - margen_error) * shin_factor
@@ -1003,9 +973,7 @@ async def handle_pronostico(message):
     pick_riesgo_cuota  = 0
 
     # ============================================================
-    # CAMBIO 5: Detector de "zona gris" — mercado muy eficiente
-    # Si modelo y mercado están alineados en los 3 resultados,
-    # forzar NO BET independientemente del edge calculado
+    # CAMBIO 5: Detector de "zona gris"
     # ============================================================
     zona_gris = (
         abs(prob_poisson_calibrado_local - prob_market_l) < 0.03 and
@@ -1037,7 +1005,6 @@ async def handle_pronostico(message):
         else:
             nivel = "DIAMANTE 💎"
 
-        # Pick de riesgo: segundo candidato si existe, sino nada
         if len(candidatos) > 1:
             _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
             kelly_riesgo  = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
@@ -1059,15 +1026,14 @@ async def handle_pronostico(message):
 
         # ============================================================
         # CAMBIO 5b: Pick de riesgo en NO BET basado en Poisson real
-        # (no en edge — el edge es negativo en NO BET)
         # ============================================================
         top_scores = calcular_marcadores_probables(lh, la, top_n=3)
         if top_scores:
             marcador_top = top_scores[0][0]
             prob_riesgo = top_scores[0][1] * 100
             pick_riesgo_nombre = f"{marcador_top[0]}-{marcador_top[1]}"
-            pick_riesgo_cuota  = 0   # marcador exacto, sin cuota directa del modelo
-            stake_riesgo       = 0.25  # stake mínimo fijo para picks de riesgo
+            pick_riesgo_cuota  = 0
+            stake_riesgo       = 0.25
             nivel_riesgo       = "RIESGO ALTO 🔴"
             logging.info(f"[RiesgoPoisson] Pick de riesgo en NO BET: {pick_riesgo_nombre} ({prob_riesgo:.1f}%)")
 
@@ -1191,7 +1157,6 @@ async def handle_pronostico(message):
         f"</code>\n"
     )
 
-    # Indicador H2H con fuente explícita
     if check_h2h:
         h2h_indicador = f"✅ H2H ({fuente_h2h})"
     else:
@@ -1224,7 +1189,7 @@ PARTIDO: {m_l} vs {m_v}
 • Lambda local BASE (sin ajustes): {lh_base:.2f}
 • Lambda visitante BASE (sin ajustes): {la_base:.2f}
 • Factor calibración histórica: ×{factor_calibracion:.2f} {'(modelo sobreestima)' if factor_calibracion < 1 else '(modelo subestima)' if factor_calibracion > 1 else '(sin datos aún)'}
-• Zona gris detectada: {'SÍ — modelo y mercado alineados en los 3 resultados' if zona_gris else 'No'}
+• Zona gris detectada: {'SÍ — modelo y mercado alineados en los 3 resultados (diferencia < 3%)' if zona_gris else 'No'}
 
 ── MERCADO DE CUOTAS ──
 • Cuota local: {c_l} → prob. implícita bruta: {(1/c_l)*100:.1f}%
@@ -1258,10 +1223,11 @@ PARTIDO: {m_l} vs {m_v}
 • Señal Over/Under: {ou_texto}
 • {empate_aviso}
 
-── PICK DE RIESGO (marcador más probable Poisson) ──
+── PICK DE RIESGO (marcador exacto más probable según Poisson+DC) ──
 • Marcador más probable: {pick_riesgo_nombre if pick_riesgo_nombre else "N/A"}
 • Probabilidad Poisson: {prob_riesgo:.1f}%
-• Stake sugerido: {stake_riesgo}% (cap 0.25%, solo para riesgo consciente)
+• Stake sugerido: {stake_riesgo}% (tope 0.25%, solo para riesgo consciente)
+• IMPORTANTE: Este marcador NO tiene edge positivo. Es el escenario estadístico más frecuente según λH={lh:.2f}/λA={la:.2f}, no una recomendación de apuesta con valor esperado.
 
 ── HISTORIAL H2H (Understat · desde JSON) ──
 • Resultado: {h2h}
@@ -1291,22 +1257,22 @@ RESULTADO DEL MODELO
 🎯 PICK PRINCIPAL: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
-🎲 PICK RIESGO (Poisson): {pick_riesgo_nombre if pick_riesgo_nombre else "Sin dato"}  ({prob_riesgo:.1f}%)
+🎲 PICK RIESGO (Poisson marcador exacto): {pick_riesgo_nombre if pick_riesgo_nombre else "Sin dato"}  ({prob_riesgo:.1f}%)
 ═══════════════════════════════════════
 
 INSTRUCCIONES PARA TU ANÁLISIS:
 1. El sistema ya evaluó los tres resultados (local, empate, visitante) y eligió el de mayor edge positivo como pick principal.
-   - Si el pick es "No Bet", todos los edges son negativos → no hay valor en ningún resultado.
-   - Si hay zona gris detectada, menciona que el mercado está eficientemente priceado.
-   - El pick de riesgo es el marcador más probable según Poisson — aclara que no es un value bet sino el escenario estadístico más frecuente.
-2. Redacta un análisis de máximo 130 palabras que integre:
-   a) Por qué el pick seleccionado tiene valor (edge modelo vs mercado).
-   b) Si Shin y normalización simple coinciden o divergen, y qué implica.
-   c) Si la forma reciente y la tabla refuerzan o contradicen el pronóstico.
-   d) Si el H2H en sede favorece al resultado elegido.
-   e) Si hay bajas relevantes y cómo afectan las lambdas.
-   f) Si el O/U confirma o contradice la apuesta.
-3. Sé directo, técnico y conciso. No repitas los números exactos del header, interprétalos.
+   - Si el pick es "No Bet", todos los edges son negativos → no hay valor estadístico en ningún resultado.
+   - Si hay zona gris detectada, explica brevemente que modelo y mercado están alineados en los 3 resultados (diferencia < 3% en cada uno), lo que indica un mercado eficientemente priceado donde apostar no tiene ventaja esperada.
+   - El pick de riesgo es el MARCADOR EXACTO más probable según distribución Poisson+Dixon-Coles. NO es un value bet ni una recomendación de apuesta con edge positivo. Es el escenario estadístico más frecuente según el modelo, útil solo para quien quiere asumir riesgo consciente en mercados de marcador exacto.
+2. Redacta un análisis de máximo 240 palabras que integre:
+   a) Por qué el pick seleccionado tiene o no tiene valor (diferencia edge modelo vs mercado, y si supera el margen dinámico).
+   b) Si Shin y normalización simple coinciden o divergen, y qué implica para la confianza de la señal.
+   c) Si la forma reciente y la posición en tabla refuerzan o contradicen el pronóstico.
+   d) Si el H2H en sede histórico favorece o no al resultado elegido, y si la muestra es suficientemente grande.
+   e) Si hay bajas relevantes detectadas y cómo afectan las lambdas esperadas.
+   f) Si la señal Over/Under confirma o contradice la dirección de la apuesta.
+3. Sé directo, técnico y conciso. No repitas los números exactos del header, interprétalos. Usa lenguaje analítico, no promotional.
 """
 
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
@@ -1325,16 +1291,18 @@ INSTRUCCIONES PARA TU ANÁLISIS:
             f"Prob. modelo: Local {p_local_pct:.1f}% | Empate {p_empate_pct:.1f}% | Visita {p_visita_pct:.1f}%\n"
             f"Prob. mercado: Local {prob_market_l*100:.1f}% | Empate {prob_market_e*100:.1f}% | Visita {prob_market_v*100:.1f}%\n"
             f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n"
-            f"Margen dinámico: {margen_error*100:.3f}% | Zona gris: {'SÍ' if zona_gris else 'No'}\n\n"
+            f"Margen dinámico: {margen_error*100:.3f}% | Zona gris: {'SÍ' if zona_gris else 'No'}\n"
+            f"Pick de riesgo (Poisson): {pick_riesgo_nombre if pick_riesgo_nombre else 'N/A'} | Prob: {prob_riesgo:.1f}% | Stake: {stake_riesgo}%\n\n"
             f"── CONTEXTO ──\n"
             f"H2H ({fuente_h2h}): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
             f"Forma local: {forma_local_txt} | Forma visita: {forma_visita_txt}\n"
             f"Tabla: {tabla_texto}\n"
             f"Elo: {elo_texto}\n"
             f"Bajas: {serper_txt}\n"
-            f"Noticias: {contexto_noticias[:300]}\n\n"
+            f"Noticias: {contexto_noticias[:1000]}\n\n"
             f"── TU TAREA ──\n"
-            f"En máximo 60 palabras: ¿Los datos respaldan o contradicen el pick? "
+            f"En máximo 85 palabras: ¿Los datos respaldan o contradicen el pick principal? "
+            f"Si hay pick de riesgo (marcador Poisson), evalúa brevemente si el marcador sugerido es coherente con λH/λA. "
             f"Señala la contradicción más importante si existe, o confirma la coherencia. "
             f"Sé directo. No repitas números ya visibles en el header."
         )
@@ -1644,18 +1612,15 @@ async def handle_health(request):
 
 
 async def main():
-    # Registrar webhook en Telegram
     await bot.remove_webhook()
     await asyncio.sleep(1)
     await bot.set_webhook(url=WEBHOOK_URL)
     logging.info(f"[Arranque] Webhook registrado: {WEBHOOK_URL}")
 
-    # Precalentar cache
     logging.info("[Arranque] Precalentando cache de partidos FINISHED...")
     await obtener_partidos_finished()
     logging.info("[Arranque] ✅ Cache lista.")
 
-    # Servidor web aiohttp
     app = web.Application()
     app.router.add_post(WEBHOOK_PATH, handle_webhook)
     app.router.add_get("/", handle_health)
@@ -1666,7 +1631,6 @@ async def main():
     await site.start()
     logging.info(f"[Arranque] Servidor escuchando en puerto {PORT}")
 
-    # Mantener vivo indefinidamente
     await asyncio.Event().wait()
 
 
