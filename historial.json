@@ -10,7 +10,8 @@
         "nivel": "BRONCE 🥉",
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
-        "status": "⏳ PENDIENTE"
+        "status": "✅ WIN",
+        "marcador_real": "1-2"
     },
     {
         "fecha": "2026-05-01 02:16",
@@ -23,6 +24,7 @@
         "nivel": "BRONCE 🥉",
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
-        "status": "⏳ PENDIENTE"
+        "status": "✅ WIN",
+        "marcador_real": "1-2"
     }
 ]
