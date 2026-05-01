@@ -927,18 +927,28 @@ async def handle_pronostico(message):
     # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 8: Normalización simple + Shin ---
+    # --- PASO 8: Normalización simple + Shin (consistente para los 3 resultados) ---
+    # FIX 1: prob_market_simple calculada para L/E/V desde el inicio,
+    # evitando mezcla inconsistente donde solo el local usaba normalización simple.
     overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
-    prob_market_simple = (1 / c_l) / overround
+    prob_simple_l = (1 / c_l) / overround
+    prob_simple_e = (1 / c_e) / overround
+    prob_simple_v = (1 / c_v) / overround
+
+    # Backward compat: prob_market_simple sigue apuntando al local para el display
+    prob_market_simple = prob_simple_l
 
     shin_l, shin_e, shin_v, shin_z = calcular_shin(c_l, c_e, c_v)
 
-    divergencia_shin = abs(shin_l - prob_market_simple)
+    divergencia_shin = abs(shin_l - prob_simple_l)
     shin_confianza, shin_factor, shin_z_txt = interpretar_shin(divergencia_shin, shin_z)
 
-    prob_market = (prob_market_simple + shin_l) / 2
+    # Probabilidad de mercado final: promedio ponderado Simple + Shin para los 3
+    prob_market_l = (prob_simple_l + shin_l) / 2
+    prob_market_e = (prob_simple_e + shin_e) / 2
+    prob_market_v = (prob_simple_v + shin_v) / 2
 
-    p_win = (prob_poisson_calibrado * 0.90) + (prob_market * 0.10)
+    p_win = (prob_poisson_calibrado * 0.90) + (prob_market_l * 0.10)
     p_percent = p_win * 100
 
     # --- PASO 9: Over/Under como confirmación del stake ---
@@ -960,10 +970,6 @@ async def handle_pronostico(message):
     prob_poisson_visita_cal        = prob_poisson_visita * factor_calibracion
 
     p_win = prob_poisson_calibrado_local
-
-    prob_market_l = (prob_market_simple + shin_l) / 2
-    prob_market_e = (shin_e + (1/c_e)/overround) / 2
-    prob_market_v = (shin_v + (1/c_v)/overround) / 2
 
     margen_error = 0.005
 
@@ -1007,8 +1013,11 @@ async def handle_pronostico(message):
         candidatos.sort(key=lambda c: c[1], reverse=True)
         tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
 
+        # FIX 3: Kelly fraccionado escala con confianza Shin
+        # Alta (factor=1.0)→Kelly×0.25 | Media (0.85)→Kelly×0.21 | Baja (0.70)→Kelly×0.18
+        kelly_fraccion    = 0.25 * shin_factor
         kelly_full        = edge_principal / (cuota_pick - 1)
-        kelly_fraccionado = kelly_full * 0.25
+        kelly_fraccionado = kelly_full * kelly_fraccion
         stake_base        = round(kelly_fraccionado * 100, 2)
         stake             = round(stake_base * ou_factor, 2)
         stake             = max(0.25, min(stake, 3.0))
@@ -1151,7 +1160,7 @@ async def handle_pronostico(message):
         f"Poisson  🏠 {p_local_pct:.1f}%  🤝 {p_empate_pct:.1f}%  🚩 {p_visita_pct:.1f}%\n"
         f"λH {lh:.2f}  λA {la:.2f}\n"
         f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
-        f"Mercado  Simple {prob_market_simple*100:.1f}%  Shin {shin_l*100:.1f}%\n"
+        f"Mercado  Simple 🏠{prob_simple_l*100:.1f}% 🤝{prob_simple_e*100:.1f}% 🚩{prob_simple_v*100:.1f}%\n"
         f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
         f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
         f"Rango L  [{rango_l[0]}–{rango_l[1]}]  Rango V [{rango_v[0]}–{rango_v[1]}]\n"
@@ -1275,16 +1284,29 @@ INSTRUCCIONES PARA TU ANÁLISIS:
     nodos_txt = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
     if SISTEMA_IA["auditor"]["nodo"]:
+        # FIX 8: Auditor independiente — NO ve el análisis del estratega.
+        # Recibe solo datos crudos para emitir veredicto sin sesgo de confirmación.
         prompt_a = (
-            f"ERES AUDITOR. Valida este análisis: '{analisis_raw}'\n"
-            f"NOTICIAS RECIENTES:\n{contexto_noticias}\n"
-            f"H2H (sede-corregido, football-data): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
-            f"Forma local: {forma_local_txt} (atk ×{forma_local_atk:.3f})\n"
-            f"Forma visita: {forma_visita_txt} (atk ×{forma_visita_atk:.3f})\n"
+            f"ERES AUDITOR INDEPENDIENTE de apuestas deportivas. Tu misión es evaluar si el pick del modelo "
+            f"es correcto basándote EXCLUSIVAMENTE en los datos crudos. NO has leído ningún análisis previo.\n\n"
+            f"PARTIDO: {m_l} vs {m_v}\n\n"
+            f"── DATOS CRUDOS ──\n"
+            f"Pick del modelo: {pick_final} | Nivel: {nivel} | Stake: {stake}%\n"
+            f"Edge local: {edge_ajustado*100:.2f}% | Edge empate: {edge_empate*100:.2f}% | Edge visitante: {edge_visita*100:.2f}%\n"
+            f"Prob. modelo: Local {p_local_pct:.1f}% | Empate {p_empate_pct:.1f}% | Visita {p_visita_pct:.1f}%\n"
+            f"Prob. mercado: Local {prob_market_l*100:.1f}% | Empate {prob_market_e*100:.1f}% | Visita {prob_market_v*100:.1f}%\n"
+            f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n\n"
+            f"── CONTEXTO ──\n"
+            f"H2H (sede-corregida): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
+            f"Forma local: {forma_local_txt} | Forma visita: {forma_visita_txt}\n"
             f"Tabla: {tabla_texto}\n"
-            f"Shin z={shin_z:.4f} | Divergencia={divergencia_shin*100:.2f}% | Confianza: {shin_confianza}\n"
-            f"Edge ajustado: {edge_ajustado*100:.2f}% | Stake: {stake}%\n"
-            f"¿Hay alguna contradicción entre el análisis y los datos? Resumen muy breve (máx 60 palabras)."
+            f"Elo: {elo_texto}\n"
+            f"Bajas: {serper_txt}\n"
+            f"Noticias: {contexto_noticias[:300]}\n\n"
+            f"── TU TAREA ──\n"
+            f"En máximo 60 palabras: ¿Los datos respaldan o contradicen el pick? "
+            f"Señala la contradicción más importante si existe, o confirma la coherencia. "
+            f"Sé directo. No repitas números ya visibles en el header."
         )
         auditoria_raw = await ejecutar_ia("auditor", prompt_a)
         nodos_txt += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
