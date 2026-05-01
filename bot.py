@@ -404,82 +404,63 @@ async def obtener_partidos_finished() -> list:
 
 
 # ============================================================
-# FIX 2 — H2H sede-corregido: umbral reducido a 1 partido
+# H2H — lee desde la sección "h2h" del modelo_poisson.json
 # ============================================================
-async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombre_visita: str):
+def obtener_h2h_json(id_local: int, id_visita: int, full_data: dict) -> tuple:
     """
-    Calcula H2H desde los partidos FINISHED de football-data.org.
-    Prioriza partidos donde id_local jugó exactamente como local.
-    Umbral reducido a 1 (antes 3) porque en LaLiga solo hay
-    1 enfrentamiento por sede por temporada.
-    Devuelve (texto, check_h2h, home_wins, away_wins, total).
+    Lee H2H desde la sección 'h2h' del modelo_poisson.json (ya en cache).
+    Devuelve (texto_fuente, check_h2h, home_wins, away_wins, total, fuente_label)
+
+    fuente_label posibles valores:
+      "Understat 2T"  → 6+ partidos con xG (dos temporadas completas)
+      "Understat 1T"  → 1-5 partidos con xG (una temporada parcial)
+      "{n}p sin xG"   → partidos sin xG disponible
+      "sin_datos"     → sin enfrentamientos registrados
     """
-    partidos = await obtener_partidos_finished()
+    liga = next(iter(full_data))
+    h2h_section = full_data[liga].get("h2h", {})
+    clave = f"{id_local}_{id_visita}"
+    entrada = h2h_section.get(clave)
 
-    if not partidos:
-        return "H2H: Sin datos de partidos.", False, 0, 0, 0
+    if not entrada or not entrada.get("partidos"):
+        return "H2H: Sin datos en JSON.", False, 0, 0, 0, "sin_datos"
 
-    # Partidos exactos: id_local como local, id_visita como visitante
-    partidos_sede = [
-        m for m in partidos
-        if m["homeTeam"]["id"] == id_local and m["awayTeam"]["id"] == id_visita
-    ]
+    partidos = entrada["partidos"]
+    temporadas_con_xg = entrada.get("temporadas_con_xg", 0)
+    total = len(partidos)
 
-    # FIX: umbral 1 en vez de 3
-    if len(partidos_sede) < 1:
-        partidos_cualquier_sede = [
-            m for m in partidos
-            if (
-                (m["homeTeam"]["id"] == id_local  and m["awayTeam"]["id"] == id_visita) or
-                (m["homeTeam"]["id"] == id_visita and m["awayTeam"]["id"] == id_local)
-            )
-        ]
-        partidos_cualquier_sede.sort(key=lambda m: m["utcDate"], reverse=True)
-        partidos_sede = partidos_cualquier_sede[:10]
-        modo_sede = False
-    else:
-        partidos_sede = partidos_sede[:10]
-        modo_sede = True
-
-    if not partidos_sede:
-        return "H2H: Sin enfrentamientos registrados esta temporada.", False, 0, 0, 0
-
-    l, v, e = 0, 0, 0
-    for m in partidos_sede:
-        winner  = m["score"].get("winner")
-        if not winner:
-            continue
-        home_id = m["homeTeam"]["id"]
-        if winner == "HOME_TEAM":
-            if home_id == id_local:
-                l += 1
-            else:
-                v += 1
-        elif winner == "AWAY_TEAM":
-            if home_id == id_local:
-                v += 1
-            else:
-                l += 1
+    home_wins, away_wins, empates = 0, 0, 0
+    for p in partidos:
+        w = p.get("winner")
+        if w == "HOME_TEAM":
+            home_wins += 1
+        elif w == "AWAY_TEAM":
+            away_wins += 1
         else:
-            e += 1
+            empates += 1
 
-    total = l + v + e
-    if total == 0:
-        return "H2H: Sin resultados válidos.", False, 0, 0, 0
+    # Etiqueta de fuente para el indicador
+    if temporadas_con_xg >= 6:
+        fuente_label = "Understat 2T"
+    elif temporadas_con_xg >= 1:
+        fuente_label = "Understat 1T"
+    elif total >= 1:
+        fuente_label = f"{total}p sin xG"
+    else:
+        fuente_label = "sin_datos"
 
-    sede_txt = "en esta sede" if modo_sede else "cualquier sede"
-    texto    = f"H2H ({sede_txt} · {total} partidos)"
-    logging.info(f"[H2H-FD] {nombre_local} vs {nombre_visita}: L={l} V={v} E={e} ({sede_txt})")
-    return texto, True, l, v, total
+    texto = f"H2H ({total} partidos · {fuente_label})"
+    logging.info(f"[H2H-JSON] {id_local} vs {id_visita}: L={home_wins} V={away_wins} E={empates} | fuente={fuente_label}")
+    return texto, True, home_wins, away_wins, total, fuente_label
 
 
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
-    if total_partidos < 3:
-        return 1.0, 1.0, "H2H: Insuficientes datos"
+    if total_partidos < 1:
+        return 1.0, 1.0, "H2H: Sin datos"
 
-    tasa_local = home_wins / total_partidos
+    tasa_local  = home_wins / total_partidos
     tasa_visita = away_wins / total_partidos
-    MAX_AJUSTE = 0.08
+    MAX_AJUSTE  = 0.08
 
     if tasa_local > 0.60:
         intensidad = min((tasa_local - 0.60) / 0.40, 1.0)
@@ -675,15 +656,9 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
 # FIX 1 — calcular_factor_elo: añade HOME_ELO_BONUS al local
 # ============================================================
 def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
-    """
-    Convierte diferencia Elo en factor multiplicador para λH y λA.
-    Aplica HOME_ELO_BONUS (+50 pts) al local como ventaja de campo explícita.
-    Máximo ajuste: ±8% (~200 puntos de diferencia efectiva).
-    """
     MAX_AJUSTE = 0.08
     MAX_DIFF   = 200.0
 
-    # Bonus de campo solo en el Elo, no en las lambdas directamente
     elo_local_ajustado = elo_local + HOME_ELO_BONUS
 
     diff       = elo_local_ajustado - elo_visita
@@ -707,18 +682,6 @@ def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
 # FIX 3 — calcular_lambdas_base: stats neutras + HOME_ADVANTAGE_FACTOR
 # ============================================================
 def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
-    """
-    Calcula lambdas base sin doble conteo de ventaja de campo.
-    Usa stats globales/neutras del equipo. La ventaja de campo
-    queda exclusivamente en HOME_ADVANTAGE_FACTOR (lambda) y
-    HOME_ELO_BONUS (Elo), sin superposición.
-
-    Jerarquía de stats del JSON:
-      1. 'att' / 'def'         → stats globales neutras (ideal)
-      2. promedio att_h+att_a  → si no hay globales
-      3. fallback a att_h/att_a → último recurso
-    """
-    # Ataque local neutro
     if 'att' in l_s:
         att_local = l_s['att']
     elif 'att_h' in l_s and 'att_a' in l_s:
@@ -726,7 +689,6 @@ def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
     else:
         att_local = l_s.get('att_h', 1.0)
 
-    # Defensa local neutra
     if 'def' in l_s:
         def_local = l_s['def']
     elif 'def_h' in l_s and 'def_a' in l_s:
@@ -734,7 +696,6 @@ def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
     else:
         def_local = l_s.get('def_h', 1.0)
 
-    # Ataque visitante neutro
     if 'att' in v_s:
         att_visita = v_s['att']
     elif 'att_h' in v_s and 'att_a' in v_s:
@@ -742,7 +703,6 @@ def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
     else:
         att_visita = v_s.get('att_a', 1.0)
 
-    # Defensa visitante neutra
     if 'def' in v_s:
         def_visita = v_s['def']
     elif 'def_h' in v_s and 'def_a' in v_s:
@@ -750,14 +710,11 @@ def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
     else:
         def_visita = v_s.get('def_a', 1.0)
 
-    # Promedio de liga neutro
     if 'league_avg' in avg:
         avg_neutro = avg['league_avg']
     else:
         avg_neutro = (avg.get('league_home', 1.5) + avg.get('league_away', 1.2)) / 2
 
-    # Lambdas base: solo HOME_ADVANTAGE_FACTOR da ventaja de campo aquí
-    # El Elo añade el ajuste INDIVIDUAL por calidad relativa (sin duplicar)
     lh_base = att_local  * def_visita * avg_neutro * HOME_ADVANTAGE_FACTOR
     la_base = att_visita * def_local  * avg_neutro
 
@@ -835,7 +792,7 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
 
 
 # ============================================================
-# Comando Principal: Pronóstico V11 (con los 3 fixes aplicados)
+# Comando Principal: Pronóstico V11
 # ============================================================
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
@@ -869,7 +826,6 @@ async def handle_pronostico(message):
         (c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v),
         (contexto_noticias, penalty_local, penalty_visita),
         factor_calibracion,
-        (h2h, check_h2h, home_wins, away_wins, total_h2h),
         (forma_local_atk, forma_local_def, forma_local_txt),
         (forma_visita_atk, forma_visita_def, forma_visita_txt),
         tabla
@@ -877,21 +833,21 @@ async def handle_pronostico(message):
         obtener_datos_mercado(l_q),
         obtener_contexto_real(l_q, v_q),
         obtener_factor_calibracion(),
-        obtener_h2h_fd(id_l, id_v, m_l, m_v),
         obtener_forma_reciente(id_l),
         obtener_forma_reciente(id_v),
         obtener_posiciones_tabla()
     )
 
+    # H2H desde JSON (síncrono, ya está en cache de memoria)
+    h2h, check_h2h, home_wins, away_wins, total_h2h, fuente_h2h = obtener_h2h_json(id_l, id_v, full_data)
+
     elos = await calcular_elo_equipos(tabla)
 
-    # --- PASO 1: Lambdas base CORREGIDAS (FIX 3) ---
-    # Stats neutras + HOME_ADVANTAGE_FACTOR exclusivo
-    # Sin doble conteo con Elo ni avg_home
+    # --- PASO 1: Lambdas base ---
     avg = full_data[liga]['averages']
     lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
 
-    # --- PASO 2: Ajuste H2H (sede-corregido, FIX 2) ---
+    # --- PASO 2: Ajuste H2H ---
     factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
 
     # --- PASO 3: Ajuste forma reciente ---
@@ -907,7 +863,7 @@ async def handle_pronostico(message):
             t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
         )
 
-    # --- PASO 4b: Ajuste Elo dinámico (FIX 1: incluye HOME_ELO_BONUS) ---
+    # --- PASO 4b: Ajuste Elo dinámico ---
     factor_lh_elo, factor_la_elo, elo_texto = 1.0, 1.0, "Elo: Sin datos"
     if elos and id_l in elos and id_v in elos:
         factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
@@ -927,15 +883,12 @@ async def handle_pronostico(message):
     # --- PASO 7: Calibración histórica ---
     prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-    # --- PASO 8: Normalización simple + Shin (consistente para los 3 resultados) ---
-    # FIX 1: prob_market_simple calculada para L/E/V desde el inicio,
-    # evitando mezcla inconsistente donde solo el local usaba normalización simple.
+    # --- PASO 8: Normalización simple + Shin ---
     overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
     prob_simple_l = (1 / c_l) / overround
     prob_simple_e = (1 / c_e) / overround
     prob_simple_v = (1 / c_v) / overround
 
-    # Backward compat: prob_market_simple sigue apuntando al local para el display
     prob_market_simple = prob_simple_l
 
     shin_l, shin_e, shin_v, shin_z = calcular_shin(c_l, c_e, c_v)
@@ -943,7 +896,6 @@ async def handle_pronostico(message):
     divergencia_shin = abs(shin_l - prob_simple_l)
     shin_confianza, shin_factor, shin_z_txt = interpretar_shin(divergencia_shin, shin_z)
 
-    # Probabilidad de mercado final: promedio ponderado Simple + Shin para los 3
     prob_market_l = (prob_simple_l + shin_l) / 2
     prob_market_e = (prob_simple_e + shin_e) / 2
     prob_market_v = (prob_simple_v + shin_v) / 2
@@ -951,7 +903,7 @@ async def handle_pronostico(message):
     p_win = (prob_poisson_calibrado * 0.90) + (prob_market_l * 0.10)
     p_percent = p_win * 100
 
-    # --- PASO 9: Over/Under como confirmación del stake ---
+    # --- PASO 9: Over/Under ---
     ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
     # --- PASO 10: Probabilidades Poisson para los 3 resultados ---
@@ -1013,8 +965,6 @@ async def handle_pronostico(message):
         candidatos.sort(key=lambda c: c[1], reverse=True)
         tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
 
-        # FIX 3: Kelly fraccionado escala con confianza Shin
-        # Alta (factor=1.0)→Kelly×0.25 | Media (0.85)→Kelly×0.21 | Baja (0.70)→Kelly×0.18
         kelly_fraccion    = 0.25 * shin_factor
         kelly_full        = edge_principal / (cuota_pick - 1)
         kelly_fraccionado = kelly_full * kelly_fraccion
@@ -1170,6 +1120,12 @@ async def handle_pronostico(message):
         f"</code>\n"
     )
 
+    # Indicador H2H con fuente explícita
+    if check_h2h:
+        h2h_indicador = f"✅ H2H ({fuente_h2h})"
+    else:
+        h2h_indicador = "⚠️ H2H (sin datos)"
+
     context_block = (
         f"\n<b>◆ CONTEXTO</b>\n"
         f"<b>H2H</b> {h2h_texto} → {h2h_ajuste_txt}\n"
@@ -1178,7 +1134,7 @@ async def handle_pronostico(message):
         f"<b>🏆</b> {tabla_texto}\n"
         f"<b>⚡</b> {elo_texto} <i>({elo_src_txt})</i>\n"
         f"<b>📰</b>{serper_txt}\n"
-        f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {'✅' if check_h2h else '❌'} H2H</b>\n"
+        f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {h2h_indicador}</b>\n"
     )
 
     header = decision_block + signals_block + context_block
@@ -1229,8 +1185,9 @@ PARTIDO: {m_l} vs {m_v}
 • Señal Over/Under: {ou_texto}
 • {empate_aviso}
 
-── HISTORIAL H2H (SEDE-CORREGIDO, football-data.org) ──
+── HISTORIAL H2H (Understat · desde JSON) ──
 • Resultado: {h2h}
+• Fuente: {fuente_h2h}
 • Victorias local en casa: {home_wins} | Victorias visita fuera: {away_wins} | Total analizados: {total_h2h}
 • Ajuste aplicado: {h2h_ajuste_txt}
 
@@ -1284,8 +1241,6 @@ INSTRUCCIONES PARA TU ANÁLISIS:
     nodos_txt = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
     if SISTEMA_IA["auditor"]["nodo"]:
-        # FIX 8: Auditor independiente — NO ve el análisis del estratega.
-        # Recibe solo datos crudos para emitir veredicto sin sesgo de confirmación.
         prompt_a = (
             f"ERES AUDITOR INDEPENDIENTE de apuestas deportivas. Tu misión es evaluar si el pick del modelo "
             f"es correcto basándote EXCLUSIVAMENTE en los datos crudos. NO has leído ningún análisis previo.\n\n"
@@ -1297,7 +1252,7 @@ INSTRUCCIONES PARA TU ANÁLISIS:
             f"Prob. mercado: Local {prob_market_l*100:.1f}% | Empate {prob_market_e*100:.1f}% | Visita {prob_market_v*100:.1f}%\n"
             f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n\n"
             f"── CONTEXTO ──\n"
-            f"H2H (sede-corregida): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
+            f"H2H ({fuente_h2h}): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
             f"Forma local: {forma_local_txt} | Forma visita: {forma_visita_txt}\n"
             f"Tabla: {tabla_texto}\n"
             f"Elo: {elo_texto}\n"
