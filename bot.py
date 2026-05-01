@@ -480,7 +480,12 @@ def calcular_shin(odds_l, odds_e, odds_v):
         p_shin_nuevo = []
         for p in p_raw:
             discriminante = z ** 2 + 4 * (1 - z) * (p / overround)
-            p_shin_nuevo.append((discriminante ** 0.5 - z) / (2 * (1 - z)))
+            discriminante = max(discriminante, 0.0)  # evitar raíz de negativo
+            denom_shin = 2 * (1 - z)
+            if denom_shin == 0:
+                p_shin_nuevo.append(p / overround)
+            else:
+                p_shin_nuevo.append((discriminante ** 0.5 - z) / denom_shin)
 
         suma = sum(p_shin_nuevo)
         min_p = min(p_shin_nuevo)
@@ -488,6 +493,7 @@ def calcular_shin(odds_l, odds_e, odds_v):
         if denominador == 0:
             break
         z_nuevo = (suma - 1) / denominador
+        z_nuevo = max(0.0, min(z_nuevo, 0.15))  # clamp: z ∈ [0, 0.15]
         if abs(z_nuevo - z) < 1e-9:
             p_shin = p_shin_nuevo
             break
@@ -685,8 +691,7 @@ async def handle_pronostico(message):
     # --- Filtros equivalentes para visitante ---
     if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
         edge_visita = -0.001
-    if c_e < 3.0 and edge_visita > 0:
-        edge_visita *= 0.80
+    # No aplicar penalización c_e < 3.0 al visitante: ese filtro es solo para el local
 
     # --- Selección del pick principal: el resultado con mayor edge positivo ---
     candidatos = []
@@ -772,11 +777,39 @@ async def handle_pronostico(message):
 
     clave_partido = f"{m_l}_vs_{m_v}_{fecha_hoy[:10]}"
     ahora = datetime.now(timezone.utc)
-    if clave_partido in COOLDOWN and (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60:
-        logging.info(f"[Cooldown] Ignorando guardado duplicado para {clave_partido}")
+
+    # Cooldown en RAM (evita duplicados en la misma sesión)
+    ya_en_ram = (
+        clave_partido in COOLDOWN and
+        (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60
+    )
+
+    # Cooldown persistente: verificar si ya existe en GitHub
+    async def ya_en_github():
+        try:
+            url_hist = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+            r = await asyncio.to_thread(requests.get, url_hist, timeout=10)
+            if r.status_code != 200:
+                return False
+            historial_gh = r.json()
+            fecha_hoy_str = fecha_hoy[:10]
+            partido_key = f"{m_l} vs {m_v}"
+            return any(
+                h.get("partido") == partido_key and h.get("fecha", "")[:10] == fecha_hoy_str
+                for h in historial_gh
+            )
+        except:
+            return False
+
+    if ya_en_ram:
+        logging.info(f"[Cooldown RAM] Ignorando duplicado para {clave_partido}")
     else:
-        COOLDOWN[clave_partido] = ahora
-        asyncio.create_task(task_github())
+        duplicado_github = await ya_en_github()
+        if duplicado_github:
+            logging.info(f"[Cooldown GitHub] Ya existe registro para {clave_partido}, omitiendo guardado.")
+        else:
+            COOLDOWN[clave_partido] = ahora
+            asyncio.create_task(task_github())
 
     # --- Construir textos resumen de ajustes ---
     calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
@@ -1064,28 +1097,48 @@ async def cmd_validar(message):
     url_h = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
         r_hist = await asyncio.to_thread(requests.get, url_h, timeout=10)
+        if r_hist.status_code != 200:
+            await bot.edit_message_text("❌ No se pudo leer el historial.", message.chat.id, msg_espera.message_id); return
         historial_raw = r_hist.json()
+
         data_api = await api_football_call("matches?status=FINISHED")
-        if not data_api:
-            await bot.edit_message_text("❌ Sin resultados nuevos.", message.chat.id, msg_espera.message_id); return
+        if not data_api or 'matches' not in data_api:
+            await bot.edit_message_text("❌ Sin resultados desde la API.", message.chat.id, msg_espera.message_id); return
+
         count = 0
         for item in historial_raw:
-            if item.get("status") == "⏳ PENDIENTE":
-                for m in data_api['matches']:
-                    h_api = m['homeTeam']['name'].lower()
-                    a_api = m['awayTeam']['name'].lower()
-                    if h_api in item['partido'].lower() and a_api in item['partido'].lower():
-                        winner = m['score']['winner']
-                        item['status'] = evaluar_resultado(item['pick'], item['partido'], h_api, a_api, winner)
-                        item['marcador_real'] = f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
-                        count += 1
+            if item.get("status") != "⏳ PENDIENTE":
+                continue
+            partido_lower = item['partido'].lower()
+            for m in data_api['matches']:
+                h_api = m['homeTeam']['name'].lower()
+                a_api = m['awayTeam']['name'].lower()
+                # Match parcial: busca si el nombre del equipo está contenido
+                local_match = any(p in h_api or h_api in p for p in partido_lower.split(" vs ")[0:1])
+                visita_match = any(p in a_api or a_api in p for p in partido_lower.split(" vs ")[1:2])
+                if local_match and visita_match:
+                    winner = m['score'].get('winner')
+                    if not winner:
+                        continue  # partido sin resultado aún
+                    item['status'] = evaluar_resultado(
+                        item['pick'], item['partido'], h_api, a_api, winner
+                    )
+                    item['marcador_real'] = (
+                        f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
+                    )
+                    count += 1
+                    break  # evitar doble match
+
         if count > 0:
             await guardar_en_github(historial_completo=historial_raw)
-            await bot.edit_message_text(f"✅ {count} partidos validados.", message.chat.id, msg_espera.message_id)
+            await bot.edit_message_text(
+                f"✅ {count} partido(s) validado(s) y guardados.", message.chat.id, msg_espera.message_id
+            )
         else:
-            await bot.edit_message_text("ℹ️ Nada que actualizar.", message.chat.id, msg_espera.message_id)
-    except:
-        await bot.edit_message_text("❌ Fallo en validación.", message.chat.id, msg_espera.message_id)
+            await bot.edit_message_text("ℹ️ No hay partidos nuevos por actualizar.", message.chat.id, msg_espera.message_id)
+    except Exception as e:
+        logging.error(f"Error /validar: {e}", exc_info=True)
+        await bot.edit_message_text(f"❌ Fallo en validación: {str(e)[:80]}", message.chat.id, msg_espera.message_id)
 
 @bot.message_handler(commands=['partidos'])
 async def cmd_partidos(message):
