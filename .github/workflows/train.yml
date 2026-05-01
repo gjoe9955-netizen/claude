@@ -24,7 +24,7 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install requests pandas numpy scipy understat aiohttp
+          pip install requests pandas numpy scipy understat aiohttp nest_asyncio
 
       - name: Ejecutar el script Trainer
         env:
