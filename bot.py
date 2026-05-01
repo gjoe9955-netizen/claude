@@ -5,6 +5,7 @@ import asyncio
 import logging
 import requests
 import base64
+import re as _re
 import html 
 from scipy.stats import poisson
 from datetime import datetime, timedelta, timezone
@@ -1582,6 +1583,271 @@ async def cb_save(call):
 async def cb_fin(call):
     await bot.edit_message_text("🚀 <b>SISTEMA LISTO</b>", call.message.chat.id, call.message.message_id, parse_mode='HTML')
 
+# ============================================================
+# Comando /live — Análisis in-play con Poisson ajustado
+# ============================================================
+async def obtener_partido_inplay(l_q: str, v_q: str):
+    """Busca el partido en curso desde Football Data API."""
+    try:
+        data = await api_football_call("matches?status=IN_PLAY,PAUSED")
+        if not data or "matches" not in data:
+            return None
+        for m in data["matches"]:
+            h = m["homeTeam"]["name"].lower()
+            a = m["awayTeam"]["name"].lower()
+            if (l_q.lower() in h or h in l_q.lower()) and (v_q.lower() in a or a in v_q.lower()):
+                return m
+    except Exception as e:
+        logging.error(f"[Live] Error buscando partido: {e}")
+    return None
+
+
+async def obtener_cuotas_live(l_q: str):
+    """Intenta obtener cuotas live desde Odds API, con fallback a pre-partido."""
+    if not ODDS_API_KEY:
+        return None, None, None, "sin_api", None
+    try:
+        url = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'h2h'}
+        r = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
+        if r.status_code != 200:
+            return None, None, None, "error_api", None
+
+        # Detectar si las cuotas son live o pre-partido por timestamp
+        ahora = datetime.now(timezone.utc)
+        for match in r.json():
+            h = match['home_team'].lower()
+            if not (l_q.lower() in h or h in l_q.lower()):
+                continue
+            bms = match.get('bookmakers', [])
+            if not bms:
+                continue
+            ts_str = bms[0].get('last_update', '')
+            try:
+                ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                delay_min = (ahora - ts).total_seconds() / 60
+            except:
+                delay_min = 999
+
+            ol_list, oe_list, ov_list = [], [], []
+            for bm in bms[:6]:
+                try:
+                    outcomes = bm['markets'][0]['outcomes']
+                    ol = next(o['price'] for o in outcomes if o['name'] == match['home_team'])
+                    ov = next(o['price'] for o in outcomes if o['name'] == match['away_team'])
+                    oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
+                    ol_list.append(ol); oe_list.append(oe); ov_list.append(ov)
+                except: continue
+
+            if not ol_list:
+                continue
+
+            c_l = round(sum(ol_list)/len(ol_list), 3)
+            c_e = round(sum(oe_list)/len(oe_list), 3)
+            c_v = round(sum(ov_list)/len(ov_list), 3)
+            tipo = "live" if delay_min < 12 else "pre-partido"
+            return c_l, c_e, c_v, tipo, round(delay_min, 1)
+
+    except Exception as e:
+        logging.error(f"[Live Odds] Error: {e}")
+    return None, None, None, "sin_datos", None
+
+
+def calcular_poisson_live(lh_base: float, la_base: float, minuto: int, goles_local: int, goles_visita: int):
+    """Recalcula Poisson ajustado a minutos restantes y marcador actual."""
+    minutos_restantes = max(90 - minuto, 1)
+    escala = minutos_restantes / 90
+
+    lh_live = lh_base * escala
+    la_live = la_base * escala
+
+    # Probabilidades condicionales dado el marcador actual
+    prob_local_gana = 0.0
+    prob_empate     = 0.0
+    prob_visita_gana = 0.0
+
+    for x in range(8):
+        for y in range(8):
+            p = poisson.pmf(x, lh_live) * poisson.pmf(y, la_live) * dixon_coles_tau(x, y, lh_live, la_live)
+            total_l = goles_local + x
+            total_v = goles_visita + y
+            if total_l > total_v:
+                prob_local_gana += p
+            elif total_l == total_v:
+                prob_empate += p
+            else:
+                prob_visita_gana += p
+
+    total = prob_local_gana + prob_empate + prob_visita_gana
+    if total > 0:
+        prob_local_gana  /= total
+        prob_empate      /= total
+        prob_visita_gana /= total
+
+    return lh_live, la_live, prob_local_gana, prob_empate, prob_visita_gana
+
+
+@bot.message_handler(commands=['live'])
+async def handle_live(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
+    if not SISTEMA_IA["estratega"]["nodo"]:
+        await bot.reply_to(message, "🚨 Configura los nodos con `/config`."); return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 or " vs " not in parts[1]:
+        await bot.reply_to(message, "⚠️ `/live Local vs Visitante`"); return
+
+    l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
+    msg_espera = await bot.reply_to(message, "📡 Buscando partido en curso...")
+
+    # 1. Buscar partido IN_PLAY
+    partido = await obtener_partido_inplay(l_q, v_q)
+    if not partido:
+        await bot.edit_message_text(
+            "❌ No se encontró ese partido en curso. Verifica con /partidos.",
+            message.chat.id, msg_espera.message_id
+        ); return
+
+    minuto      = partido.get("minute") or partido.get("currentPeriod", {}) and 45
+    goles_local   = partido["score"]["fullTime"]["home"] or 0
+    goles_visita  = partido["score"]["fullTime"]["away"] or 0
+    m_l = partido["homeTeam"]["name"]
+    m_v = partido["awayTeam"]["name"]
+
+    # Intentar obtener minuto real
+    try:
+        minuto = int(partido.get("minute", 45))
+    except:
+        minuto = 45
+
+    await bot.edit_message_text(
+        f"📡 Partido encontrado: {m_l} {goles_local}-{goles_visita} {m_v} (min ~{minuto})\n⚙️ Calculando análisis live...",
+        message.chat.id, msg_espera.message_id
+    )
+
+    # 2. Cargar modelo Poisson base
+    full_data, _ = await obtener_modelo()
+    if not full_data:
+        await bot.edit_message_text("❌ Error al cargar modelo JSON.", message.chat.id, msg_espera.message_id); return
+
+    liga = next(iter(full_data))
+    eq_l = next((t for t in full_data[liga]['teams'] if t.lower() in m_l.lower() or m_l.lower() in t.lower()), None)
+    eq_v = next((t for t in full_data[liga]['teams'] if t.lower() in m_v.lower() or m_v.lower() in t.lower()), None)
+
+    if not eq_l or not eq_v:
+        await bot.edit_message_text("❌ Equipos no encontrados en el JSON.", message.chat.id, msg_espera.message_id); return
+
+    l_s = full_data[liga]['teams'][eq_l]
+    v_s = full_data[liga]['teams'][eq_v]
+    avg = full_data[liga]['averages']
+    lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
+
+    # 3. Cuotas live o fallback
+    c_l, c_e, c_v, tipo_cuota, delay_min = await obtener_cuotas_live(l_q)
+    if not c_l:
+        c_l, c_e, c_v = 1.85, 3.50, 4.00
+        tipo_cuota = "default"
+        delay_min = None
+
+    # 4. Poisson live ajustado
+    lh_live, la_live, p_local, p_empate, p_visita = calcular_poisson_live(
+        lh_base, la_base, minuto, goles_local, goles_visita
+    )
+
+    # 5. Edge live
+    overround = (1/c_l) + (1/c_e) + (1/c_v)
+    pm_l = (1/c_l) / overround
+    pm_e = (1/c_e) / overround
+    pm_v = (1/c_v) / overround
+
+    edge_l = p_local  - pm_l
+    edge_e = p_empate - pm_e
+    edge_v = p_visita - pm_v
+
+    # 6. Pick live
+    candidatos = []
+    if edge_l > 0.03: candidatos.append(("local",  edge_l, c_l, eq_l,     p_local*100))
+    if edge_e > 0.03: candidatos.append(("empate", edge_e, c_e, "Empate",  p_empate*100))
+    if edge_v > 0.03: candidatos.append(("visita", edge_v, c_v, eq_v,      p_visita*100))
+
+    if candidatos:
+        candidatos.sort(key=lambda x: x[1], reverse=True)
+        tipo_pick, edge_pick, cuota_pick, nombre_pick, prob_pick = candidatos[0]
+        kelly = round(min(max((edge_pick / (cuota_pick - 1)) * 0.25 * 100, 0.25), 2.0), 2)
+        tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick, "")
+        pick_txt = f"{tipo_emoji} {nombre_pick}"
+        nivel_live = "ORO 🥇" if kelly >= 1.25 else ("PLATA 🥈" if kelly >= 0.75 else "BRONCE 🥉")
+    else:
+        pick_txt   = "🚫 Sin valor detectado"
+        edge_pick  = 0; cuota_pick = 0; prob_pick = 0; kelly = 0
+        nivel_live = "NO BET"
+
+    cuota_tipo_txt = f"({'⚡live' if tipo_cuota == 'live' else '⚠️pre-partido' if tipo_cuota == 'pre-partido' else '❌default'}, delay {delay_min}min)" if delay_min is not None else f"({tipo_cuota})"
+
+    # 7. Prompt IA live
+    prompt_live = f"""
+Eres analista de fútbol in-play. Analiza el partido EN CURSO con los datos ajustados al minuto actual.
+
+PARTIDO EN CURSO: {m_l} {goles_local}-{goles_visita} {m_v} | Minuto ~{minuto}
+Minutos restantes: {90 - minuto}
+
+── POISSON LIVE (ajustado a minutos restantes y marcador) ──
+• λH live: {lh_live:.2f} | λA live: {la_live:.2f}
+• λH base (90min): {lh_base:.2f} | λA base (90min): {la_base:.2f}
+• Prob. local gana partido: {p_local*100:.1f}%
+• Prob. empate final: {p_empate*100:.1f}%
+• Prob. visita gana partido: {p_visita*100:.1f}%
+
+── CUOTAS {cuota_tipo_txt} ──
+• Local: {c_l} → implícita {pm_l*100:.1f}%
+• Empate: {c_e} → implícita {pm_e*100:.1f}%
+• Visita: {c_v} → implícita {pm_v*100:.1f}%
+
+── EDGE LIVE ──
+• Edge local: {edge_l*100:.1f}%
+• Edge empate: {edge_e*100:.1f}%
+• Edge visita: {edge_v*100:.1f}%
+
+── PICK LIVE ──
+• Pick: {pick_txt}
+• Nivel: {nivel_live}
+• Stake Kelly: {kelly}%
+
+INSTRUCCIONES:
+En máximo 150 palabras analiza:
+1. Si el pick tiene valor real dado el marcador actual y minutos restantes
+2. Si las cuotas reflejan correctamente la situación del partido
+3. Qué tan probable es que el marcador actual se mantenga o cambie según las lambdas live
+Sé directo y técnico. {'AVISO: cuotas con delay ' + str(delay_min) + ' min, pueden no reflejar el momento exacto.' if tipo_cuota == 'pre-partido' else ''}
+"""
+
+    analisis_live_raw = await ejecutar_ia("estratega", prompt_live)
+    analisis_live = html.escape(_re.sub(r'<[^>]+>', '', analisis_live_raw or ""))
+
+    # 8. Construir mensaje
+    header_live = (
+        f"<b>⚡ ANÁLISIS LIVE</b>\n"
+        f"<b>{html.escape(m_l)} {goles_local} - {goles_visita} {html.escape(m_v)}</b>\n"
+        f"<i>Minuto ~{minuto} | {90-minuto} min restantes</i>\n\n"
+        f"<b>╔{'═'*22}╗</b>\n"
+        f"<b>║  {nivel_live:<22}║</b>\n"
+        f"<b>║  {html.escape(pick_txt):<22}║</b>\n"
+        f"<b>║  💰 Stake: {kelly}% Kelly{' '*12}║</b>\n"
+        f"<b>╚{'═'*22}╝</b>\n\n"
+        f"<code>"
+        f"Poisson  🏠 {p_local*100:.1f}%  🤝 {p_empate*100:.1f}%  🚩 {p_visita*100:.1f}%\n"
+        f"λH {lh_live:.2f} (base {lh_base:.2f})  λA {la_live:.2f} (base {la_base:.2f})\n"
+        f"Edge     🏠 {edge_l*100:.1f}%  🤝 {edge_e*100:.1f}%  🚩 {edge_v*100:.1f}%\n"
+        f"Cuotas   L {c_l}  E {c_e}  V {c_v}  {html.escape(cuota_tipo_txt)}\n"
+        f"</code>\n\n"
+        f"<b>◆ ANÁLISIS LIVE</b>\n"
+    )
+
+    final_live = header_live + analisis_live + f"\n\n<i>{'—'*18}\nV11-Live · 🛰 <code>{SISTEMA_IA['estratega']['api']}</code></i>"
+    await bot.edit_message_text(final_live, message.chat.id, msg_espera.message_id, parse_mode='HTML')
+
+
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
     if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
@@ -1590,6 +1856,7 @@ async def cmd_help(message):
         "🤖 <b>SISTEMA V11.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
         "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Elo + Odds + Shin + Kelly.\n"
+        "• <code>/live Local vs Visitante</code>: Análisis in-play con Poisson ajustado a minuto y marcador actual.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
