@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 import os
 import json
 import asyncio
 import logging
 import requests
 import base64
-import html
+import html 
 from scipy.stats import poisson
 from datetime import datetime, timedelta, timezone
 
@@ -14,1183 +15,1133 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 from aiohttp import web
 
-# — Configuración de Entorno —
-
+# --- Configuración de Entorno ---
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
 
-TOKEN = os.getenv(‘TOKEN_TELEGRAM’)
-GROQ_KEY = os.getenv(‘GROQ_API_KEY’)
-SAMBA_KEY = os.getenv(‘SAMBA_KEY’)
-FOOTBALL_DATA_KEY = os.getenv(‘FOOTBALL_DATA_API_KEY’)
-ODDS_API_KEY = os.getenv(‘API_KEY_ODDS’)
-GITHUB_TOKEN = os.getenv(‘GITHUB_TOKEN’)
-SERPER_KEY = os.getenv(‘SERPER_API_KEY’)
-JINA_KEY = os.getenv(‘JINA_API_KEY’)
+TOKEN = os.getenv('TOKEN_TELEGRAM')
+GROQ_KEY = os.getenv('GROQ_API_KEY')
+SAMBA_KEY = os.getenv('SAMBA_KEY')
+FOOTBALL_DATA_KEY = os.getenv('FOOTBALL_DATA_API_KEY')
+ODDS_API_KEY = os.getenv('API_KEY_ODDS')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
+SERPER_KEY = os.getenv('SERPER_API_KEY')
+JINA_KEY = os.getenv('JINA_API_KEY')
 
 OFFSET_JUAREZ = -6
-URL_JSON = “https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json”
-REPO_OWNER = “gjoe9955-netizen”
-REPO_NAME = “claude”
-FILE_PATH = “historial.json”
+URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
+REPO_OWNER = "gjoe9955-netizen"
+REPO_NAME = "claude"
+FILE_PATH = "historial.json"
 
 bot = AsyncTeleBot(TOKEN)
 COOLDOWN = {}
 COOLDOWN_MINUTOS = 30
 
 # ── CONSTANTES DE VENTAJA DE CAMPO (FIX V11) ────────────────
-
 HOME_ADVANTAGE_FACTOR = 1.10   # Local marca ~10% más en LaLiga (histórico)
 HOME_ELO_BONUS        = 50     # Ventaja de campo en puntos Elo (estándar FIFA)
 DC_RHO                = -0.13  # Dixon-Coles rho
 
-# — Cache del modelo en memoria —
-
-_MODELO_CACHE = {“data”: None, “ts”: None}
+# --- Cache del modelo en memoria ---
+_MODELO_CACHE = {"data": None, "ts": None}
 CACHE_TTL_SEGUNDOS = 3600
 
 async def obtener_modelo():
-“”“Carga modelo_poisson.json desde GitHub, con cache de 1 hora.”””
-ahora = datetime.now(timezone.utc)
-if _MODELO_CACHE[“data”] and _MODELO_CACHE[“ts”] and (ahora - _MODELO_CACHE[“ts”]).total_seconds() < CACHE_TTL_SEGUNDOS:
-return _MODELO_CACHE[“data”], True
-try:
-r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
-if r.status_code == 200:
-_MODELO_CACHE[“data”] = r.json()
-_MODELO_CACHE[“ts”] = ahora
-return _MODELO_CACHE[“data”], True
-except:
-pass
-return _MODELO_CACHE[“data”], False
+    """Carga modelo_poisson.json desde GitHub, con cache de 1 hora."""
+    ahora = datetime.now(timezone.utc)
+    if _MODELO_CACHE["data"] and _MODELO_CACHE["ts"] and (ahora - _MODELO_CACHE["ts"]).total_seconds() < CACHE_TTL_SEGUNDOS:
+        return _MODELO_CACHE["data"], True
+    try:
+        r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
+        if r.status_code == 200:
+            _MODELO_CACHE["data"] = r.json()
+            _MODELO_CACHE["ts"] = ahora
+            return _MODELO_CACHE["data"], True
+    except:
+        pass
+    return _MODELO_CACHE["data"], False
 
-# — Función de Búsqueda de Última Hora (Serper + Jina) —
-
+# --- Función de Búsqueda de Última Hora (Serper + Jina) ---
 PALABRAS_BAJA_LOCAL = [
-“baja”, “lesión”, “lesionado”, “no jugará”, “ausente”, “descartado”, “out”,
-“baja confirmada”, “no estará”, “se pierde”, “fuera de la convocatoria”,
-“no disponible”, “sancionado”, “suspendido”
+    "baja", "lesión", "lesionado", "no jugará", "ausente", "descartado", "out",
+    "baja confirmada", "no estará", "se pierde", "fuera de la convocatoria",
+    "no disponible", "sancionado", "suspendido"
 ]
 PALABRAS_BAJA_VISITA = PALABRAS_BAJA_LOCAL
 
+
 async def fetch_jina(url: str) -> str:
-“”“Lee el contenido completo de una URL via Jina AI.”””
-if not JINA_KEY:
-return “”
-try:
-jina_url = f”https://r.jina.ai/{url}”
-headers = {
-“Authorization”: f”Bearer {JINA_KEY}”,
-“Accept”: “text/plain”,
-“X-Return-Format”: “text”
-}
-r = await asyncio.to_thread(requests.get, jina_url, headers=headers, timeout=30)
-if r.status_code == 200:
-return r.text[:3000]
-except Exception as e:
-logging.error(f”Error Jina: {e}”)
-return “”
+    """Lee el contenido completo de una URL via Jina AI."""
+    if not JINA_KEY:
+        return ""
+    try:
+        jina_url = f"https://r.jina.ai/{url}"
+        headers = {
+            "Authorization": f"Bearer {JINA_KEY}",
+            "Accept": "text/plain",
+            "X-Return-Format": "text"
+        }
+        r = await asyncio.to_thread(requests.get, jina_url, headers=headers, timeout=30)
+        if r.status_code == 200:
+            return r.text[:3000]
+    except Exception as e:
+        logging.error(f"Error Jina: {e}")
+    return ""
+
 
 async def obtener_contexto_real(l_q, v_q):
-“””
-Devuelve (texto_noticias, factor_penalty_local, factor_penalty_visita).
-Usa Jina para leer contenido completo de las URLs que devuelve Serper.
-“””
-if not SERPER_KEY:
-return “No hay API Key de Serper configurada.”, 1.0, 1.0
+    """
+    Devuelve (texto_noticias, factor_penalty_local, factor_penalty_visita).
+    Usa Jina para leer contenido completo de las URLs que devuelve Serper.
+    """
+    if not SERPER_KEY:
+        return "No hay API Key de Serper configurada.", 1.0, 1.0
 
-```
-url = "https://google.serper.dev/search"
-query = f'(site:jornadaperfecta.com OR site:futbolfantasy.com) "{l_q}" "{v_q}" alineación'
+    url = "https://google.serper.dev/search"
+    query = f'(site:jornadaperfecta.com OR site:futbolfantasy.com) "{l_q}" "{v_q}" alineación'
 
-payload = json.dumps({
-    "q": query,
-    "gl": "es",
-    "hl": "es",
-    "tbs": "qdr:w"
-})
-headers = {
-    'X-API-KEY': SERPER_KEY,
-    'Content-Type': 'application/json'
+    payload = json.dumps({
+        "q": query,
+        "gl": "es",
+        "hl": "es",
+        "tbs": "qdr:w"
+    })
+    headers = {
+        'X-API-KEY': SERPER_KEY,
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        r = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=15)
+        res = r.json().get('organic', [])
+
+        if not res:
+            return "No se encontraron noticias recientes.", 1.0, 1.0
+
+        urls_top = [item['link'] for item in res[:2] if item.get('link')]
+        contenidos_jina = await asyncio.gather(*[fetch_jina(u) for u in urls_top])
+
+        contexto = ""
+        penalty_local = 1.0
+        penalty_visita = 1.0
+
+        for i, item in enumerate(res[:3]):
+            snippet = item.get('snippet', '')
+            titulo = item.get('title', '')
+
+            contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
+            texto_analisis = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
+
+            contexto += f"- {titulo}: {snippet}\n"
+
+            if l_q.lower() in texto_analisis:
+                if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
+                    penalty_local = 0.93
+
+            if v_q.lower() in texto_analisis:
+                if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
+                    penalty_visita = 0.93
+
+        contexto_final = contexto if contexto else "No se encontraron noticias recientes."
+        return contexto_final, penalty_local, penalty_visita
+
+    except Exception as e:
+        logging.error(f"Error Serper/Jina: {e}")
+        return "Error consultando noticias de última hora.", 1.0, 1.0
+
+# --- Persistencia en GitHub ---
+async def guardar_en_github(nuevo_registro=None, historial_completo=None):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        r_get = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+        r_get_json = r_get.json()
+
+        if r_get.status_code == 200:
+            sha = r_get_json.get('sha')
+            contenido_raw = r_get_json.get('content', '')
+            historial_actual = json.loads(base64.b64decode(contenido_raw.replace('\n', '')).decode('utf-8'))
+        elif r_get.status_code == 404:
+            sha = None
+            historial_actual = []
+        else:
+            logging.error(f"GitHub GET falló: {r_get.status_code} — {r_get_json}")
+            return
+
+        if historial_completo is None:
+            if nuevo_registro:
+                historial_actual.append(nuevo_registro)
+            historial = historial_actual
+        else:
+            historial = historial_completo
+
+        nuevo_contenido = base64.b64encode(
+            json.dumps(historial, indent=4, ensure_ascii=False).encode('utf-8')
+        ).decode('utf-8')
+
+        payload = {
+            "message": "🤖 Actualización de Historial",
+            "content": nuevo_contenido,
+        }
+        if sha:
+            payload["sha"] = sha
+
+        r_put = await asyncio.to_thread(requests.put, url, headers=headers, json=payload, timeout=15)
+        if r_put.status_code not in (200, 201):
+            logging.error(f"GitHub PUT falló: {r_put.status_code} — {r_put.json()}")
+        else:
+            logging.info(f"✅ historial.json actualizado en GitHub ({len(historial)} registros)")
+
+    except Exception as e:
+        logging.error(f"Error GitHub: {e}", exc_info=True)
+
+# --- Estado Global ---
+SISTEMA_IA = {
+    "estratega": {"api": None, "nodo": None},
+    "auditor": {"api": None, "nodo": None},
+
+    "nodos_samba": [
+        "DeepSeek-V3.2 [EST] | 99%",
+        "DeepSeek-V3.1 [EST] | 95%",
+        "Meta-Llama-3.3-70B [AUD] | 99%",
+        "gemma-3-12b-it [EST] | 92%"
+    ],
+
+    "nodos_groq": [
+        "llama-3.3-70b-versatile [EST] | 99%",
+        "qwen/qwen3-32b [EST] | 90%",
+        "meta-llama/llama-4-scout-17b-16e-instruct [AUD] | 98%",
+        "openai/gpt-oss-20b [AUD] | 94%"
+    ]
 }
 
-try:
-    r = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=15)
-    res = r.json().get('organic', [])
-
-    if not res:
-        return "No se encontraron noticias recientes.", 1.0, 1.0
-
-    urls_top = [item['link'] for item in res[:2] if item.get('link')]
-    contenidos_jina = await asyncio.gather(*[fetch_jina(u) for u in urls_top])
-
-    contexto = ""
-    penalty_local = 1.0
-    penalty_visita = 1.0
-
-    for i, item in enumerate(res[:3]):
-        snippet = item.get('snippet', '')
-        titulo = item.get('title', '')
-
-        contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
-        texto_analisis = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
-
-        contexto += f"- {titulo}: {snippet}\n"
-
-        if l_q.lower() in texto_analisis:
-            if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
-                penalty_local = 0.93
-
-        if v_q.lower() in texto_analisis:
-            if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
-                penalty_visita = 0.93
-
-    contexto_final = contexto if contexto else "No se encontraron noticias recientes."
-    return contexto_final, penalty_local, penalty_visita
-
-except Exception as e:
-    logging.error(f"Error Serper/Jina: {e}")
-    return "Error consultando noticias de última hora.", 1.0, 1.0
-```
-
-# — Persistencia en GitHub —
-
-async def guardar_en_github(nuevo_registro=None, historial_completo=None):
-url = f”https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}”
-headers = {“Authorization”: f”token {GITHUB_TOKEN}”, “Accept”: “application/vnd.github.v3+json”}
-try:
-r_get = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
-r_get_json = r_get.json()
-
-```
-    if r_get.status_code == 200:
-        sha = r_get_json.get('sha')
-        contenido_raw = r_get_json.get('content', '')
-        historial_actual = json.loads(base64.b64decode(contenido_raw.replace('\n', '')).decode('utf-8'))
-    elif r_get.status_code == 404:
-        sha = None
-        historial_actual = []
+# --- Motores de IA (Groq & SambaNova) ---
+async def ejecutar_ia(rol, prompt):
+    config = SISTEMA_IA[rol]
+    if not config["nodo"]: return None
+    
+    nodo_real = config["nodo"].split(" [")[0]
+    
+    if config["api"] == 'GROQ':
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
     else:
-        logging.error(f"GitHub GET falló: {r_get.status_code} — {r_get_json}")
-        return
-
-    if historial_completo is None:
-        if nuevo_registro:
-            historial_actual.append(nuevo_registro)
-        historial = historial_actual
-    else:
-        historial = historial_completo
-
-    nuevo_contenido = base64.b64encode(
-        json.dumps(historial, indent=4, ensure_ascii=False).encode('utf-8')
-    ).decode('utf-8')
+        url = "https://api.sambanova.ai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {SAMBA_KEY}", "Content-Type": "application/json"}
 
     payload = {
-        "message": "🤖 Actualización de Historial",
-        "content": nuevo_contenido,
+        "model": nodo_real,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1
     }
-    if sha:
-        payload["sha"] = sha
 
-    r_put = await asyncio.to_thread(requests.put, url, headers=headers, json=payload, timeout=15)
-    if r_put.status_code not in (200, 201):
-        logging.error(f"GitHub PUT falló: {r_put.status_code} — {r_put.json()}")
-    else:
-        logging.info(f"✅ historial.json actualizado en GitHub ({len(historial)} registros)")
+    try:
+        r = await asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=15)
+        return r.json()['choices'][0]['message']['content']
+    except Exception as e:
+        logging.error(f"Error IA {config['api']}: {e}")
+        return f"❌ Error en Nodo {config['api']}"
 
-except Exception as e:
-    logging.error(f"Error GitHub: {e}", exc_info=True)
-```
-
-# — Estado Global —
-
-SISTEMA_IA = {
-“estratega”: {“api”: None, “nodo”: None},
-“auditor”: {“api”: None, “nodo”: None},
-
-```
-"nodos_samba": [
-    "DeepSeek-V3.2 [EST] | 99%",
-    "DeepSeek-V3.1 [EST] | 95%",
-    "Meta-Llama-3.3-70B [AUD] | 99%",
-    "gemma-3-12b-it [EST] | 92%"
-],
-
-"nodos_groq": [
-    "llama-3.3-70b-versatile [EST] | 99%",
-    "qwen/qwen3-32b [EST] | 90%",
-    "meta-llama/llama-4-scout-17b-16e-instruct [AUD] | 98%",
-    "openai/gpt-oss-20b [AUD] | 94%"
-]
-```
-
-}
-
-# — Motores de IA (Groq & SambaNova) —
-
-async def ejecutar_ia(rol, prompt):
-config = SISTEMA_IA[rol]
-if not config[“nodo”]: return None
-
-```
-nodo_real = config["nodo"].split(" [")[0]
-
-if config["api"] == 'GROQ':
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
-else:
-    url = "https://api.sambanova.ai/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {SAMBA_KEY}", "Content-Type": "application/json"}
-
-payload = {
-    "model": nodo_real,
-    "messages": [{"role": "user", "content": prompt}],
-    "temperature": 0.1
-}
-
-try:
-    r = await asyncio.to_thread(requests.post, url, headers=headers, json=payload, timeout=15)
-    return r.json()['choices'][0]['message']['content']
-except Exception as e:
-    logging.error(f"Error IA {config['api']}: {e}")
-    return f"❌ Error en Nodo {config['api']}"
-```
-
-# — Núcleo Estadístico y APIs —
-
+# --- Núcleo Estadístico y APIs ---
 async def obtener_datos_mercado(equipo_l):
-if not ODDS_API_KEY: return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+    if not ODDS_API_KEY: return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
-```
-CASAS_PREFERIDAS = {
-    "pinnacle", "betfair", "bet365", "williamhill",
-    "unibet", "bwin", "betway", "marathonbet"
-}
-MAX_CASAS = 6
+    CASAS_PREFERIDAS = {
+        "pinnacle", "betfair", "bet365", "williamhill",
+        "unibet", "bwin", "betway", "marathonbet"
+    }
+    MAX_CASAS = 6
 
-try:
-    url = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
-    params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'h2h'}
-    r = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
-    if r.status_code != 200:
-        return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
-
-    for match in r.json():
-        home = match['home_team'].lower()
-        query = equipo_l.lower()
-        if not (query in home or home in query):
-            continue
-
-        bookmakers = match.get('bookmakers', [])
-        bookmakers_ordenados = sorted(
-            bookmakers,
-            key=lambda b: (0 if b['key'] in CASAS_PREFERIDAS else 1)
-        )
-
-        ol_list, oe_list, ov_list = [], [], []
-        casas_usadas = []
-
-        for bm in bookmakers_ordenados[:MAX_CASAS]:
-            try:
-                outcomes = bm['markets'][0]['outcomes']
-                ol = next(o['price'] for o in outcomes if o['name'] == match['home_team'])
-                ov = next(o['price'] for o in outcomes if o['name'] == match['away_team'])
-                oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
-                ol_list.append(ol)
-                oe_list.append(oe)
-                ov_list.append(ov)
-                casas_usadas.append(bm['key'])
-            except (StopIteration, KeyError, IndexError):
-                continue
-
-        if not ol_list:
+    try:
+        url = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'h2h'}
+        r = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
+        if r.status_code != 200:
             return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
-        ol_consenso = round(sum(ol_list) / len(ol_list), 3)
-        oe_consenso = round(sum(oe_list) / len(oe_list), 3)
-        ov_consenso = round(sum(ov_list) / len(ov_list), 3)
+        for match in r.json():
+            home = match['home_team'].lower()
+            query = equipo_l.lower()
+            if not (query in home or home in query):
+                continue
 
-        rango_l = (round(min(ol_list), 3), round(max(ol_list), 3))
-        rango_v = (round(min(ov_list), 3), round(max(ov_list), 3))
+            bookmakers = match.get('bookmakers', [])
+            bookmakers_ordenados = sorted(
+                bookmakers,
+                key=lambda b: (0 if b['key'] in CASAS_PREFERIDAS else 1)
+            )
 
-        logging.info(
-            f"[Odds] Consenso de {len(casas_usadas)} casas: "
-            f"L={ol_consenso} E={oe_consenso} V={ov_consenso} "
-            f"| Rango L={rango_l} V={rango_v} "
-            f"| Casas: {casas_usadas}"
-        )
-        return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
+            ol_list, oe_list, ov_list = [], [], []
+            casas_usadas = []
 
-except Exception as e:
-    logging.error(f"Error obtener_datos_mercado: {e}")
+            for bm in bookmakers_ordenados[:MAX_CASAS]:
+                try:
+                    outcomes = bm['markets'][0]['outcomes']
+                    ol = next(o['price'] for o in outcomes if o['name'] == match['home_team'])
+                    ov = next(o['price'] for o in outcomes if o['name'] == match['away_team'])
+                    oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
+                    ol_list.append(ol)
+                    oe_list.append(oe)
+                    ov_list.append(ov)
+                    casas_usadas.append(bm['key'])
+                except (StopIteration, KeyError, IndexError):
+                    continue
 
-return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
-```
+            if not ol_list:
+                return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
-# — Over/Under como señal de confirmación —
+            ol_consenso = round(sum(ol_list) / len(ol_list), 3)
+            oe_consenso = round(sum(oe_list) / len(oe_list), 3)
+            ov_consenso = round(sum(ov_list) / len(ov_list), 3)
 
+            rango_l = (round(min(ol_list), 3), round(max(ol_list), 3))
+            rango_v = (round(min(ov_list), 3), round(max(ov_list), 3))
+
+            logging.info(
+                f"[Odds] Consenso de {len(casas_usadas)} casas: "
+                f"L={ol_consenso} E={oe_consenso} V={ov_consenso} "
+                f"| Rango L={rango_l} V={rango_v} "
+                f"| Casas: {casas_usadas}"
+            )
+            return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
+
+    except Exception as e:
+        logging.error(f"Error obtener_datos_mercado: {e}")
+
+    return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+
+# --- Over/Under como señal de confirmación ---
 async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
-if not ODDS_API_KEY:
-return 1.0, “O/U: Sin API”
-try:
-url = “https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/”
-params = {‘apiKey’: ODDS_API_KEY, ‘regions’: ‘eu’, ‘markets’: ‘totals’}
-r = await asyncio.to_thread(requests.get, url, params=params, timeout=15)
-if r.status_code == 200:
-for match in r.json():
-home = match[‘home_team’].lower()
-query = equipo_l.lower()
-if query in home or home in query:
-for bm in match[‘bookmakers’]:
-for mkt in bm[‘markets’]:
-if mkt[‘key’] == ‘totals’:
-over_price = next((o[‘price’] for o in mkt[‘outcomes’] if o[‘name’] == ‘Over’), None)
-if over_price:
-prob_over_mercado = 1 / over_price
-prob_over_poisson = 0.0
-for x in range(7):
-for y in range(7):
-p = poisson.pmf(x, lambda_h) * poisson.pmf(y, lambda_a) * dixon_coles_tau(x, y, lambda_h, lambda_a)
-if x + y > 2:
-prob_over_poisson += p
-diff = prob_over_poisson - prob_over_mercado
-if diff > 0.05:
-return 1.2, f”O/U ✅ Confirmación ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)”
-elif diff < -0.05:
-return 0.8, f”O/U ⚠️ Contradicción ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)”
-else:
-return 1.0, f”O/U ➡️ Neutro ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)”
-except Exception as e:
-logging.error(f”Error O/U: {e}”)
-return 1.0, “O/U: Sin datos”
+    if not ODDS_API_KEY:
+        return 1.0, "O/U: Sin API"
+    try:
+        url = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'totals'}
+        r = await asyncio.to_thread(requests.get, url, params=params, timeout=15)
+        if r.status_code == 200:
+            for match in r.json():
+                home = match['home_team'].lower()
+                query = equipo_l.lower()
+                if query in home or home in query:
+                    for bm in match['bookmakers']:
+                        for mkt in bm['markets']:
+                            if mkt['key'] == 'totals':
+                                over_price = next((o['price'] for o in mkt['outcomes'] if o['name'] == 'Over'), None)
+                                if over_price:
+                                    prob_over_mercado = 1 / over_price
+                                    prob_over_poisson = 0.0
+                                    for x in range(7):
+                                        for y in range(7):
+                                            p = poisson.pmf(x, lambda_h) * poisson.pmf(y, lambda_a) * dixon_coles_tau(x, y, lambda_h, lambda_a)
+                                            if x + y > 2:
+                                                prob_over_poisson += p
+                                    diff = prob_over_poisson - prob_over_mercado
+                                    if diff > 0.05:
+                                        return 1.2, f"O/U ✅ Confirmación ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
+                                    elif diff < -0.05:
+                                        return 0.8, f"O/U ⚠️ Contradicción ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
+                                    else:
+                                        return 1.0, f"O/U ➡️ Neutro ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
+    except Exception as e:
+        logging.error(f"Error O/U: {e}")
+    return 1.0, "O/U: Sin datos"
 
-# — Calibración del modelo con historial propio —
-
+# --- Calibración del modelo con historial propio ---
 async def obtener_factor_calibracion():
-url = f”https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}”
-try:
-r = await asyncio.to_thread(requests.get, url, timeout=10)
-if r.status_code != 200:
-return 1.0
-historial = r.json()
-completados = [h for h in historial if h.get(‘status’) in (‘✅ WIN’, ‘❌ LOSS’) and ‘poisson’ in h]
-if len(completados) < 10:
-return 1.0
-wins = sum(1 for h in completados if h[‘status’] == ‘✅ WIN’)
-tasa_real = wins / len(completados)
-tasa_predicha = sum(float(h[‘poisson’].replace(’%’, ‘’)) / 100 for h in completados) / len(completados)
-if tasa_predicha == 0:
-return 1.0
-factor = tasa_real / tasa_predicha
-return max(0.85, min(1.15, factor))
-except:
-return 1.0
+    url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+    try:
+        r = await asyncio.to_thread(requests.get, url, timeout=10)
+        if r.status_code != 200:
+            return 1.0
+        historial = r.json()
+        completados = [h for h in historial if h.get('status') in ('✅ WIN', '❌ LOSS') and 'poisson' in h]
+        if len(completados) < 10:
+            return 1.0
+        wins = sum(1 for h in completados if h['status'] == '✅ WIN')
+        tasa_real = wins / len(completados)
+        tasa_predicha = sum(float(h['poisson'].replace('%', '')) / 100 for h in completados) / len(completados)
+        if tasa_predicha == 0:
+            return 1.0
+        factor = tasa_real / tasa_predicha
+        return max(0.85, min(1.15, factor))
+    except:
+        return 1.0
 
 async def api_football_call(endpoint):
-headers = {‘X-Auth-Token’: FOOTBALL_DATA_KEY}
-try:
-r = await asyncio.to_thread(requests.get, f”https://api.football-data.org/v4/competitions/PD/{endpoint}”, headers=headers, timeout=20)
-return r.json() if r.status_code == 200 else None
-except: return None
+    headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
+    try:
+        r = await asyncio.to_thread(requests.get, f"https://api.football-data.org/v4/competitions/PD/{endpoint}", headers=headers, timeout=20)
+        return r.json() if r.status_code == 200 else None
+    except: return None
+
 
 # ============================================================
-
 # Cache de partidos FINISHED
-
 # ============================================================
-
-_PARTIDOS_FD_CACHE = {“data”: None, “ts”: None}
+_PARTIDOS_FD_CACHE = {"data": None, "ts": None}
 PARTIDOS_FD_TTL = 3600
 
+
 async def obtener_partidos_finished() -> list:
-ahora = datetime.now(timezone.utc)
-if (
-_PARTIDOS_FD_CACHE[“data”] is not None and
-_PARTIDOS_FD_CACHE[“ts”] and
-(ahora - _PARTIDOS_FD_CACHE[“ts”]).total_seconds() < PARTIDOS_FD_TTL
-):
-return _PARTIDOS_FD_CACHE[“data”]
+    ahora = datetime.now(timezone.utc)
+    if (
+        _PARTIDOS_FD_CACHE["data"] is not None and
+        _PARTIDOS_FD_CACHE["ts"] and
+        (ahora - _PARTIDOS_FD_CACHE["ts"]).total_seconds() < PARTIDOS_FD_TTL
+    ):
+        return _PARTIDOS_FD_CACHE["data"]
 
-```
-try:
-    data = await api_football_call("matches?status=FINISHED")
-    if data and "matches" in data:
-        _PARTIDOS_FD_CACHE["data"] = data["matches"]
-        _PARTIDOS_FD_CACHE["ts"] = ahora
-        logging.info(f"[FD] ✅ {len(data['matches'])} partidos FINISHED cargados en cache.")
-        return data["matches"]
-except Exception as e:
-    logging.error(f"[FD] Error obteniendo partidos FINISHED: {e}")
+    try:
+        data = await api_football_call("matches?status=FINISHED")
+        if data and "matches" in data:
+            _PARTIDOS_FD_CACHE["data"] = data["matches"]
+            _PARTIDOS_FD_CACHE["ts"] = ahora
+            logging.info(f"[FD] ✅ {len(data['matches'])} partidos FINISHED cargados en cache.")
+            return data["matches"]
+    except Exception as e:
+        logging.error(f"[FD] Error obteniendo partidos FINISHED: {e}")
 
-return _PARTIDOS_FD_CACHE["data"] or []
-```
+    return _PARTIDOS_FD_CACHE["data"] or []
 
-# ============================================================
-
-# H2H — lee desde la sección “h2h” del modelo_poisson.json
 
 # ============================================================
-
+# H2H — lee desde la sección "h2h" del modelo_poisson.json
+# ============================================================
 def obtener_h2h_json(id_local: int, id_visita: int, full_data: dict) -> tuple:
-“””
-Lee H2H desde la sección ‘h2h’ del modelo_poisson.json (ya en cache).
-Devuelve (texto_fuente, check_h2h, home_wins, away_wins, total, fuente_label)
+    """
+    Lee H2H desde la sección 'h2h' del modelo_poisson.json (ya en cache).
+    Devuelve (texto_fuente, check_h2h, home_wins, away_wins, total, fuente_label)
 
-```
-fuente_label posibles valores:
-  "Understat 2T"  → 6+ partidos con xG (dos temporadas completas)
-  "Understat 1T"  → 1-5 partidos con xG (una temporada parcial)
-  "{n}p sin xG"   → partidos sin xG disponible
-  "sin_datos"     → sin enfrentamientos registrados
-"""
-liga = next(iter(full_data))
-h2h_section = full_data[liga].get("h2h", {})
-clave = f"{id_local}_{id_visita}"
-entrada = h2h_section.get(clave)
+    fuente_label posibles valores:
+      "Understat 2T"  → 6+ partidos con xG (dos temporadas completas)
+      "Understat 1T"  → 1-5 partidos con xG (una temporada parcial)
+      "{n}p sin xG"   → partidos sin xG disponible
+      "sin_datos"     → sin enfrentamientos registrados
+    """
+    liga = next(iter(full_data))
+    h2h_section = full_data[liga].get("h2h", {})
+    clave = f"{id_local}_{id_visita}"
+    entrada = h2h_section.get(clave)
 
-if not entrada or not entrada.get("partidos"):
-    return "H2H: Sin datos en JSON.", False, 0, 0, 0, "sin_datos"
+    if not entrada or not entrada.get("partidos"):
+        return "H2H: Sin datos en JSON.", False, 0, 0, 0, "sin_datos"
 
-partidos = entrada["partidos"]
-temporadas_con_xg = entrada.get("temporadas_con_xg", 0)
-total = len(partidos)
+    partidos = entrada["partidos"]
+    temporadas_con_xg = entrada.get("temporadas_con_xg", 0)
+    total = len(partidos)
 
-home_wins, away_wins, empates = 0, 0, 0
-for p in partidos:
-    w = p.get("winner")
-    if w == "HOME_TEAM":
-        home_wins += 1
-    elif w == "AWAY_TEAM":
-        away_wins += 1
+    home_wins, away_wins, empates = 0, 0, 0
+    for p in partidos:
+        w = p.get("winner")
+        if w == "HOME_TEAM":
+            home_wins += 1
+        elif w == "AWAY_TEAM":
+            away_wins += 1
+        else:
+            empates += 1
+
+    # Etiqueta de fuente para el indicador
+    if temporadas_con_xg >= 6:
+        fuente_label = "Understat 2T"
+    elif temporadas_con_xg >= 1:
+        fuente_label = "Understat 1T"
+    elif total >= 1:
+        fuente_label = f"{total}p sin xG"
     else:
-        empates += 1
+        fuente_label = "sin_datos"
 
-# Etiqueta de fuente para el indicador
-if temporadas_con_xg >= 6:
-    fuente_label = "Understat 2T"
-elif temporadas_con_xg >= 1:
-    fuente_label = "Understat 1T"
-elif total >= 1:
-    fuente_label = f"{total}p sin xG"
-else:
-    fuente_label = "sin_datos"
+    texto = f"H2H ({total} partidos · {fuente_label})"
+    logging.info(f"[H2H-JSON] {id_local} vs {id_visita}: L={home_wins} V={away_wins} E={empates} | fuente={fuente_label}")
+    return texto, True, home_wins, away_wins, total, fuente_label
 
-texto = f"H2H ({total} partidos · {fuente_label})"
-logging.info(f"[H2H-JSON] {id_local} vs {id_visita}: L={home_wins} V={away_wins} E={empates} | fuente={fuente_label}")
-return texto, True, home_wins, away_wins, total, fuente_label
-```
 
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
-if total_partidos < 1:
-return 1.0, 1.0, “H2H: Sin datos”
+    if total_partidos < 1:
+        return 1.0, 1.0, "H2H: Sin datos"
 
-```
-tasa_local  = home_wins / total_partidos
-tasa_visita = away_wins / total_partidos
-MAX_AJUSTE  = 0.08
+    tasa_local  = home_wins / total_partidos
+    tasa_visita = away_wins / total_partidos
+    MAX_AJUSTE  = 0.08
 
-if tasa_local > 0.60:
-    intensidad = min((tasa_local - 0.60) / 0.40, 1.0)
-    ajuste = MAX_AJUSTE * intensidad
-    factor_lh = 1.0 + ajuste
-    factor_la = 1.0 - ajuste
-    texto = f"H2H 🏠 Dominio local ({tasa_local*100:.0f}%, +{ajuste*100:.1f}% lh)"
-elif tasa_visita > 0.60:
-    intensidad = min((tasa_visita - 0.60) / 0.40, 1.0)
-    ajuste = MAX_AJUSTE * intensidad
-    factor_lh = 1.0 - ajuste
-    factor_la = 1.0 + ajuste
-    texto = f"H2H 🚩 Dominio visita ({tasa_visita*100:.0f}%, +{ajuste*100:.1f}% la)"
-else:
-    factor_lh = 1.0
-    factor_la = 1.0
-    texto = f"H2H ⚖️ Equilibrado ({home_wins}L/{away_wins}V)"
-
-return factor_lh, factor_la, texto
-```
-
-# — Forma reciente (últimos 5 partidos) —
-
-async def obtener_forma_reciente(team_id):
-if not team_id:
-return 1.0, 1.0, “Forma: Sin ID”
-
-```
-headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
-try:
-    url = f"https://api.football-data.org/v4/teams/{team_id}/matches?status=FINISHED&limit=5"
-    r = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
-    if r.status_code != 200:
-        return 1.0, 1.0, "Forma: Sin datos"
-
-    matches = r.json().get('matches', [])
-    if not matches:
-        return 1.0, 1.0, "Forma: Sin partidos"
-
-    puntos = 0
-    for m in matches[:5]:
-        w = m['score']['winner']
-        home_id = m['homeTeam']['id']
-        es_local = (home_id == team_id)
-        if (es_local and w == 'HOME_TEAM') or (not es_local and w == 'AWAY_TEAM'):
-            puntos += 3
-        elif w == 'DRAW':
-            puntos += 1
-
-    MAX_AJUSTE = 0.10
-    forma_norm = puntos / 15.0
-
-    if forma_norm > 0.67:
-        intensidad = (forma_norm - 0.67) / 0.33
+    if tasa_local > 0.60:
+        intensidad = min((tasa_local - 0.60) / 0.40, 1.0)
         ajuste = MAX_AJUSTE * intensidad
-        factor_ataque = 1.0 + ajuste
-        factor_defensa = 1.0 - ajuste
-        simbolo = "🔥"
-    elif forma_norm < 0.33:
-        intensidad = (0.33 - forma_norm) / 0.33
+        factor_lh = 1.0 + ajuste
+        factor_la = 1.0 - ajuste
+        texto = f"H2H 🏠 Dominio local ({tasa_local*100:.0f}%, +{ajuste*100:.1f}% lh)"
+    elif tasa_visita > 0.60:
+        intensidad = min((tasa_visita - 0.60) / 0.40, 1.0)
         ajuste = MAX_AJUSTE * intensidad
-        factor_ataque = 1.0 - ajuste
-        factor_defensa = 1.0 + ajuste
-        simbolo = "❄️"
+        factor_lh = 1.0 - ajuste
+        factor_la = 1.0 + ajuste
+        texto = f"H2H 🚩 Dominio visita ({tasa_visita*100:.0f}%, +{ajuste*100:.1f}% la)"
     else:
-        factor_ataque = 1.0
-        factor_defensa = 1.0
-        simbolo = "➡️"
+        factor_lh = 1.0
+        factor_la = 1.0
+        texto = f"H2H ⚖️ Equilibrado ({home_wins}L/{away_wins}V)"
 
-    texto = f"Forma {simbolo} {puntos}pts/15 (factor atk ×{factor_ataque:.3f})"
-    return factor_ataque, factor_defensa, texto
+    return factor_lh, factor_la, texto
 
-except Exception as e:
-    logging.error(f"Error forma reciente team {team_id}: {e}")
-    return 1.0, 1.0, "Forma: Error API"
-```
 
-# — Posición en tabla —
+# --- Forma reciente (últimos 5 partidos) ---
+async def obtener_forma_reciente(team_id):
+    if not team_id:
+        return 1.0, 1.0, "Forma: Sin ID"
 
+    headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
+    try:
+        url = f"https://api.football-data.org/v4/teams/{team_id}/matches?status=FINISHED&limit=5"
+        r = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+        if r.status_code != 200:
+            return 1.0, 1.0, "Forma: Sin datos"
+
+        matches = r.json().get('matches', [])
+        if not matches:
+            return 1.0, 1.0, "Forma: Sin partidos"
+
+        puntos = 0
+        for m in matches[:5]:
+            w = m['score']['winner']
+            home_id = m['homeTeam']['id']
+            es_local = (home_id == team_id)
+            if (es_local and w == 'HOME_TEAM') or (not es_local and w == 'AWAY_TEAM'):
+                puntos += 3
+            elif w == 'DRAW':
+                puntos += 1
+
+        MAX_AJUSTE = 0.10
+        forma_norm = puntos / 15.0
+
+        if forma_norm > 0.67:
+            intensidad = (forma_norm - 0.67) / 0.33
+            ajuste = MAX_AJUSTE * intensidad
+            factor_ataque = 1.0 + ajuste
+            factor_defensa = 1.0 - ajuste
+            simbolo = "🔥"
+        elif forma_norm < 0.33:
+            intensidad = (0.33 - forma_norm) / 0.33
+            ajuste = MAX_AJUSTE * intensidad
+            factor_ataque = 1.0 - ajuste
+            factor_defensa = 1.0 + ajuste
+            simbolo = "❄️"
+        else:
+            factor_ataque = 1.0
+            factor_defensa = 1.0
+            simbolo = "➡️"
+
+        texto = f"Forma {simbolo} {puntos}pts/15 (factor atk ×{factor_ataque:.3f})"
+        return factor_ataque, factor_defensa, texto
+
+    except Exception as e:
+        logging.error(f"Error forma reciente team {team_id}: {e}")
+        return 1.0, 1.0, "Forma: Error API"
+
+
+# --- Posición en tabla ---
 async def obtener_posiciones_tabla():
-try:
-data = await api_football_call(“standings”)
-if not data:
-return {}
-tabla = {}
-for t in data[‘standings’][0][‘table’]:
-tabla[t[‘team’][‘id’]] = {
-‘pos’: t[‘position’],
-‘puntos’: t[‘points’],
-‘nombre’: t[‘team’][‘name’]
-}
-return tabla
-except Exception as e:
-logging.error(f”Error tabla: {e}”)
-return {}
+    try:
+        data = await api_football_call("standings")
+        if not data:
+            return {}
+        tabla = {}
+        for t in data['standings'][0]['table']:
+            tabla[t['team']['id']] = {
+                'pos': t['position'],
+                'puntos': t['points'],
+                'nombre': t['team']['name']
+            }
+        return tabla
+    except Exception as e:
+        logging.error(f"Error tabla: {e}")
+        return {}
+
 
 def calcular_factor_tabla(pos_local, pos_visita, pts_local, pts_visita):
-MAX_AJUSTE = 0.06
-diff_pos = pos_visita - pos_local
+    MAX_AJUSTE = 0.06
+    diff_pos = pos_visita - pos_local
 
-```
-if abs(diff_pos) < 6:
-    return 1.0, 1.0, f"Tabla ⚖️ Diferencia leve ({pos_local}° vs {pos_visita}°, {pts_local}pts vs {pts_visita}pts)"
+    if abs(diff_pos) < 6:
+        return 1.0, 1.0, f"Tabla ⚖️ Diferencia leve ({pos_local}° vs {pos_visita}°, {pts_local}pts vs {pts_visita}pts)"
 
-intensidad = min((abs(diff_pos) - 6) / 14, 1.0)
-ajuste = MAX_AJUSTE * intensidad
+    intensidad = min((abs(diff_pos) - 6) / 14, 1.0)
+    ajuste = MAX_AJUSTE * intensidad
 
-if diff_pos > 0:
-    factor_lh = 1.0 + ajuste
-    factor_la = 1.0 - ajuste
-    texto = f"Tabla 📈 Local superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% lh)"
-else:
-    factor_lh = 1.0 - ajuste
-    factor_la = 1.0 + ajuste
-    texto = f"Tabla 📉 Visita superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% la)"
+    if diff_pos > 0:
+        factor_lh = 1.0 + ajuste
+        factor_la = 1.0 - ajuste
+        texto = f"Tabla 📈 Local superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% lh)"
+    else:
+        factor_lh = 1.0 - ajuste
+        factor_la = 1.0 + ajuste
+        texto = f"Tabla 📉 Visita superior ({pos_local}° vs {pos_visita}°, +{ajuste*100:.1f}% la)"
 
-return factor_lh, factor_la, texto
-```
+    return factor_lh, factor_la, texto
 
-# — Dixon-Coles: corrección para marcadores bajos —
 
+# --- Dixon-Coles: corrección para marcadores bajos ---
 def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
-if x == 0 and y == 0:
-return 1.0 - (lh * la * rho)
-if x == 1 and y == 0:
-return 1.0 + (la * rho)
-if x == 0 and y == 1:
-return 1.0 + (lh * rho)
-if x == 1 and y == 1:
-return 1.0 - rho
-return 1.0
+    if x == 0 and y == 0:
+        return 1.0 - (lh * la * rho)
+    if x == 1 and y == 0:
+        return 1.0 + (la * rho)
+    if x == 0 and y == 1:
+        return 1.0 + (lh * rho)
+    if x == 1 and y == 1:
+        return 1.0 - rho
+    return 1.0
+
 
 # ============================================================
-
 # Cache Elo
-
 # ============================================================
-
-_ELO_CACHE = {“data”: None, “ts”: None}
+_ELO_CACHE = {"data": None, "ts": None}
 ELO_CACHE_TTL = 3600
 
+
 async def calcular_elo_equipos(tabla: dict) -> dict:
-ahora = datetime.now(timezone.utc)
-if (
-_ELO_CACHE[“data”] and _ELO_CACHE[“ts”] and
-(ahora - _ELO_CACHE[“ts”]).total_seconds() < ELO_CACHE_TTL
-):
-return _ELO_CACHE[“data”]
+    ahora = datetime.now(timezone.utc)
+    if (
+        _ELO_CACHE["data"] and _ELO_CACHE["ts"] and
+        (ahora - _ELO_CACHE["ts"]).total_seconds() < ELO_CACHE_TTL
+    ):
+        return _ELO_CACHE["data"]
 
-```
-if not tabla:
-    logging.warning("[Elo] Tabla vacía — no se puede calcular Elo.")
-    return {}
+    if not tabla:
+        logging.warning("[Elo] Tabla vacía — no se puede calcular Elo.")
+        return {}
 
-elos: dict[int, float] = {tid: 1500.0 for tid in tabla}
-K = 32
+    elos: dict[int, float] = {tid: 1500.0 for tid in tabla}
+    K = 32
 
-matches = await obtener_partidos_finished()
+    matches = await obtener_partidos_finished()
 
-if not matches:
-    logging.warning("[Elo] Sin partidos FINISHED disponibles.")
+    if not matches:
+        logging.warning("[Elo] Sin partidos FINISHED disponibles.")
+        _ELO_CACHE["data"] = elos
+        _ELO_CACHE["ts"] = ahora
+        return elos
+
+    matches_ordenados = sorted(matches, key=lambda m: m["utcDate"])
+    usados = 0
+
+    for m in matches_ordenados:
+        h_id = m["homeTeam"]["id"]
+        a_id = m["awayTeam"]["id"]
+        winner = m["score"].get("winner")
+
+        if not winner or h_id not in elos or a_id not in elos:
+            continue
+
+        elo_h, elo_a = elos[h_id], elos[a_id]
+        exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
+        exp_a = 1 - exp_h
+
+        if winner == "HOME_TEAM":
+            s_h, s_a = 1.0, 0.0
+        elif winner == "AWAY_TEAM":
+            s_h, s_a = 0.0, 1.0
+        else:
+            s_h, s_a = 0.5, 0.5
+
+        elos[h_id] = elo_h + K * (s_h - exp_h)
+        elos[a_id] = elo_a + K * (s_a - exp_a)
+        usados += 1
+
     _ELO_CACHE["data"] = elos
     _ELO_CACHE["ts"] = ahora
+    logging.info(f"[Elo] ✅ Calculado para {len(elos)} equipos con {usados} partidos (temporada actual).")
     return elos
 
-matches_ordenados = sorted(matches, key=lambda m: m["utcDate"])
-usados = 0
-
-for m in matches_ordenados:
-    h_id = m["homeTeam"]["id"]
-    a_id = m["awayTeam"]["id"]
-    winner = m["score"].get("winner")
-
-    if not winner or h_id not in elos or a_id not in elos:
-        continue
-
-    elo_h, elo_a = elos[h_id], elos[a_id]
-    exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
-    exp_a = 1 - exp_h
-
-    if winner == "HOME_TEAM":
-        s_h, s_a = 1.0, 0.0
-    elif winner == "AWAY_TEAM":
-        s_h, s_a = 0.0, 1.0
-    else:
-        s_h, s_a = 0.5, 0.5
-
-    elos[h_id] = elo_h + K * (s_h - exp_h)
-    elos[a_id] = elo_a + K * (s_a - exp_a)
-    usados += 1
-
-_ELO_CACHE["data"] = elos
-_ELO_CACHE["ts"] = ahora
-logging.info(f"[Elo] ✅ Calculado para {len(elos)} equipos con {usados} partidos (temporada actual).")
-return elos
-```
 
 # ============================================================
-
 # FIX 1 — calcular_factor_elo: añade HOME_ELO_BONUS al local
-
 # ============================================================
-
 def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
-MAX_AJUSTE = 0.08
-MAX_DIFF   = 200.0
+    MAX_AJUSTE = 0.08
+    MAX_DIFF   = 200.0
 
-```
-elo_local_ajustado = elo_local + HOME_ELO_BONUS
+    elo_local_ajustado = elo_local + HOME_ELO_BONUS
 
-diff       = elo_local_ajustado - elo_visita
-intensidad = max(-1.0, min(diff / MAX_DIFF, 1.0))
-ajuste     = MAX_AJUSTE * intensidad
+    diff       = elo_local_ajustado - elo_visita
+    intensidad = max(-1.0, min(diff / MAX_DIFF, 1.0))
+    ajuste     = MAX_AJUSTE * intensidad
 
-factor_lh = round(1.0 + ajuste, 4)
-factor_la = round(1.0 - ajuste, 4)
+    factor_lh = round(1.0 + ajuste, 4)
+    factor_la = round(1.0 - ajuste, 4)
 
-if abs(ajuste) < 0.01:
-    texto = f"Elo ⚖️ Equilibrado ({elo_local:.0f}+50 vs {elo_visita:.0f})"
-elif diff > 0:
-    texto = f"Elo 📈 Local superior ({elo_local:.0f}+50 vs {elo_visita:.0f}, +{ajuste*100:.1f}% lh)"
-else:
-    texto = f"Elo 📉 Visita superior ({elo_local:.0f}+50 vs {elo_visita:.0f}, +{abs(ajuste)*100:.1f}% la)"
+    if abs(ajuste) < 0.01:
+        texto = f"Elo ⚖️ Equilibrado ({elo_local:.0f}+50 vs {elo_visita:.0f})"
+    elif diff > 0:
+        texto = f"Elo 📈 Local superior ({elo_local:.0f}+50 vs {elo_visita:.0f}, +{ajuste*100:.1f}% lh)"
+    else:
+        texto = f"Elo 📉 Visita superior ({elo_local:.0f}+50 vs {elo_visita:.0f}, +{abs(ajuste)*100:.1f}% la)"
 
-return factor_lh, factor_la, texto
-```
+    return factor_lh, factor_la, texto
+
 
 # ============================================================
-
 # FIX 3 — calcular_lambdas_base: stats neutras + HOME_ADVANTAGE_FACTOR
-
 # ============================================================
-
 def calcular_lambdas_base(l_s: dict, v_s: dict, avg: dict) -> tuple:
-if ‘att’ in l_s:
-att_local = l_s[‘att’]
-elif ‘att_h’ in l_s and ‘att_a’ in l_s:
-att_local = (l_s[‘att_h’] + l_s[‘att_a’]) / 2
-else:
-att_local = l_s.get(‘att_h’, 1.0)
+    if 'att' in l_s:
+        att_local = l_s['att']
+    elif 'att_h' in l_s and 'att_a' in l_s:
+        att_local = (l_s['att_h'] + l_s['att_a']) / 2
+    else:
+        att_local = l_s.get('att_h', 1.0)
 
-```
-if 'def' in l_s:
-    def_local = l_s['def']
-elif 'def_h' in l_s and 'def_a' in l_s:
-    def_local = (l_s['def_h'] + l_s['def_a']) / 2
-else:
-    def_local = l_s.get('def_h', 1.0)
+    if 'def' in l_s:
+        def_local = l_s['def']
+    elif 'def_h' in l_s and 'def_a' in l_s:
+        def_local = (l_s['def_h'] + l_s['def_a']) / 2
+    else:
+        def_local = l_s.get('def_h', 1.0)
 
-if 'att' in v_s:
-    att_visita = v_s['att']
-elif 'att_h' in v_s and 'att_a' in v_s:
-    att_visita = (v_s['att_h'] + v_s['att_a']) / 2
-else:
-    att_visita = v_s.get('att_a', 1.0)
+    if 'att' in v_s:
+        att_visita = v_s['att']
+    elif 'att_h' in v_s and 'att_a' in v_s:
+        att_visita = (v_s['att_h'] + v_s['att_a']) / 2
+    else:
+        att_visita = v_s.get('att_a', 1.0)
 
-if 'def' in v_s:
-    def_visita = v_s['def']
-elif 'def_h' in v_s and 'def_a' in v_s:
-    def_visita = (v_s['def_h'] + v_s['def_a']) / 2
-else:
-    def_visita = v_s.get('def_a', 1.0)
+    if 'def' in v_s:
+        def_visita = v_s['def']
+    elif 'def_h' in v_s and 'def_a' in v_s:
+        def_visita = (v_s['def_h'] + v_s['def_a']) / 2
+    else:
+        def_visita = v_s.get('def_a', 1.0)
 
-if 'league_avg' in avg:
-    avg_neutro = avg['league_avg']
-else:
-    avg_neutro = (avg.get('league_home', 1.5) + avg.get('league_away', 1.2)) / 2
+    if 'league_avg' in avg:
+        avg_neutro = avg['league_avg']
+    else:
+        avg_neutro = (avg.get('league_home', 1.5) + avg.get('league_away', 1.2)) / 2
 
-lh_base = att_local  * def_visita * avg_neutro * HOME_ADVANTAGE_FACTOR
-la_base = att_visita * def_local  * avg_neutro
+    lh_base = att_local  * def_visita * avg_neutro * HOME_ADVANTAGE_FACTOR
+    la_base = att_visita * def_local  * avg_neutro
 
-return lh_base, la_base
-```
+    return lh_base, la_base
+
 
 # ============================================================
-
 # Shin y helpers
-
 # ============================================================
-
 def calcular_shin(odds_l, odds_e, odds_v):
-p_raw = [1 / odds_l, 1 / odds_e, 1 / odds_v]
-n = len(p_raw)
-overround = sum(p_raw)
+    p_raw = [1 / odds_l, 1 / odds_e, 1 / odds_v]
+    n = len(p_raw)
+    overround = sum(p_raw)
 
-```
-z = 0.0
-p_shin = p_raw[:]
+    z = 0.0
+    p_shin = p_raw[:]
 
-for _ in range(1000):
-    p_shin_nuevo = []
-    for p in p_raw:
-        discriminante = z ** 2 + 4 * (1 - z) * (p / overround)
-        discriminante = max(discriminante, 0.0)
-        denom_shin = 2 * (1 - z)
-        if denom_shin == 0:
-            p_shin_nuevo.append(p / overround)
-        else:
-            p_shin_nuevo.append((discriminante ** 0.5 - z) / denom_shin)
+    for _ in range(1000):
+        p_shin_nuevo = []
+        for p in p_raw:
+            discriminante = z ** 2 + 4 * (1 - z) * (p / overround)
+            discriminante = max(discriminante, 0.0)
+            denom_shin = 2 * (1 - z)
+            if denom_shin == 0:
+                p_shin_nuevo.append(p / overround)
+            else:
+                p_shin_nuevo.append((discriminante ** 0.5 - z) / denom_shin)
 
-    suma = sum(p_shin_nuevo)
-    min_p = min(p_shin_nuevo)
-    denominador = suma - n * min_p
-    if denominador == 0:
-        break
-    z_nuevo = (suma - 1) / denominador
-    z_nuevo = max(0.0, min(z_nuevo, 0.15))
-    if abs(z_nuevo - z) < 1e-9:
+        suma = sum(p_shin_nuevo)
+        min_p = min(p_shin_nuevo)
+        denominador = suma - n * min_p
+        if denominador == 0:
+            break
+        z_nuevo = (suma - 1) / denominador
+        z_nuevo = max(0.0, min(z_nuevo, 0.15))
+        if abs(z_nuevo - z) < 1e-9:
+            p_shin = p_shin_nuevo
+            break
+        z = z_nuevo
         p_shin = p_shin_nuevo
-        break
-    z = z_nuevo
-    p_shin = p_shin_nuevo
 
-total = sum(p_shin)
-p_shin = [p / total for p in p_shin]
-return p_shin[0], p_shin[1], p_shin[2], z
-```
+    total = sum(p_shin)
+    p_shin = [p / total for p in p_shin]
+    return p_shin[0], p_shin[1], p_shin[2], z
+
 
 def interpretar_shin(divergencia, z):
-if divergencia < 0.02:
-confianza = “✅ Alta (Shin≈Simple, señal sólida)”
-factor = 1.0
-elif divergencia < 0.04:
-confianza = “⚠️ Media (divergencia leve, cautela)”
-factor = 0.85
-else:
-confianza = “🚨 Baja (métodos divergen, señal débil)”
-factor = 0.70
+    if divergencia < 0.02:
+        confianza = "✅ Alta (Shin≈Simple, señal sólida)"
+        factor = 1.0
+    elif divergencia < 0.04:
+        confianza = "⚠️ Media (divergencia leve, cautela)"
+        factor = 0.85
+    else:
+        confianza = "🚨 Baja (métodos divergen, señal débil)"
+        factor = 0.70
 
-```
-z_txt = "bajo (mercado eficiente)" if z < 0.02 else ("medio" if z < 0.04 else "alto (posibles insiders)")
-return confianza, factor, z_txt
-```
+    z_txt = "bajo (mercado eficiente)" if z < 0.02 else ("medio" if z < 0.04 else "alto (posibles insiders)")
+    return confianza, factor, z_txt
 
-PICKS_VOID = [“no bet”, “no apostar”, “no apostar (sin valor)”, “sin valor”]
+
+PICKS_VOID = ["no bet", "no apostar", "no apostar (sin valor)", "sin valor"]
 
 def evaluar_resultado(pick, partido, home_name, away_name, winner):
-pick_lower = pick.lower()
-if any(v in pick_lower for v in PICKS_VOID):
-return “➖ VOID”
-if winner == ‘HOME_TEAM’ and home_name.lower() in pick_lower:
-return “✅ WIN”
-if winner == ‘AWAY_TEAM’ and away_name.lower() in pick_lower:
-return “✅ WIN”
-if winner == ‘DRAW’ and “empate” in pick_lower:
-return “✅ WIN”
-return “❌ LOSS”
+    pick_lower = pick.lower()
+    if any(v in pick_lower for v in PICKS_VOID):
+        return "➖ VOID"
+    if winner == 'HOME_TEAM' and home_name.lower() in pick_lower:
+        return "✅ WIN"
+    if winner == 'AWAY_TEAM' and away_name.lower() in pick_lower:
+        return "✅ WIN"
+    if winner == 'DRAW' and "empate" in pick_lower:
+        return "✅ WIN"
+    return "❌ LOSS"
+
 
 # ============================================================
-
 # Comando Principal: Pronóstico V11
-
 # ============================================================
-
-@bot.message_handler(commands=[‘pronostico’, ‘valor’])
+@bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
-if not SISTEMA_IA[“estratega”][“nodo”]:
-await bot.reply_to(message, “🚨 Configura los nodos con `/config`.”); return
+    if not SISTEMA_IA["estratega"]["nodo"]:
+        await bot.reply_to(message, "🚨 Configura los nodos con `/config`."); return
 
-```
-parts = message.text.split(maxsplit=1)
-if len(parts) < 2 or " vs " not in parts[1]:
-    await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2 or " vs " not in parts[1]:
+        await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
-l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V11 (Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin+Jina)...")
+    l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V11 (Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin+Jina)...")
 
-full_data, check_json = await obtener_modelo()
-if not full_data:
-    await bot.edit_message_text("❌ Error al cargar el JSON del servidor.", message.chat.id, msg_espera.message_id); return
+    full_data, check_json = await obtener_modelo()
+    if not full_data:
+        await bot.edit_message_text("❌ Error al cargar el JSON del servidor.", message.chat.id, msg_espera.message_id); return
 
-liga = next(iter(full_data))
-m_l = next((t for t in full_data[liga]['teams'] if t.lower() in l_q.lower() or l_q.lower() in t.lower()), None)
-m_v = next((t for t in full_data[liga]['teams'] if t.lower() in v_q.lower() or v_q.lower() in t.lower()), None)
+    liga = next(iter(full_data))
+    m_l = next((t for t in full_data[liga]['teams'] if t.lower() in l_q.lower() or l_q.lower() in t.lower()), None)
+    m_v = next((t for t in full_data[liga]['teams'] if t.lower() in v_q.lower() or v_q.lower() in t.lower()), None)
 
-if not m_l or not m_v:
-    await bot.edit_message_text("❌ Equipo no encontrado en el JSON.", message.chat.id, msg_espera.message_id); return
+    if not m_l or not m_v:
+        await bot.edit_message_text("❌ Equipo no encontrado en el JSON.", message.chat.id, msg_espera.message_id); return
 
-l_s, v_s = full_data[liga]['teams'][m_l], full_data[liga]['teams'][m_v]
-id_l = l_s.get("id_api")
-id_v = v_s.get("id_api")
-logging.info(f"[Pronostico] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
+    l_s, v_s = full_data[liga]['teams'][m_l], full_data[liga]['teams'][m_v]
+    id_l = l_s.get("id_api")
+    id_v = v_s.get("id_api")
+    logging.info(f"[Pronostico] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
 
-(
-    (c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v),
-    (contexto_noticias, penalty_local, penalty_visita),
-    factor_calibracion,
-    (forma_local_atk, forma_local_def, forma_local_txt),
-    (forma_visita_atk, forma_visita_def, forma_visita_txt),
-    tabla
-) = await asyncio.gather(
-    obtener_datos_mercado(l_q),
-    obtener_contexto_real(l_q, v_q),
-    obtener_factor_calibracion(),
-    obtener_forma_reciente(id_l),
-    obtener_forma_reciente(id_v),
-    obtener_posiciones_tabla()
-)
-
-# H2H desde JSON (síncrono, ya está en cache de memoria)
-h2h, check_h2h, home_wins, away_wins, total_h2h, fuente_h2h = obtener_h2h_json(id_l, id_v, full_data)
-
-elos = await calcular_elo_equipos(tabla)
-
-# --- PASO 1: Lambdas base ---
-avg = full_data[liga]['averages']
-lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
-
-# --- PASO 2: Ajuste H2H ---
-factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
-
-# --- PASO 3: Ajuste forma reciente ---
-factor_lh_forma = forma_local_atk
-factor_la_forma = forma_visita_atk
-
-# --- PASO 4: Ajuste tabla ---
-factor_lh_tabla, factor_la_tabla, tabla_texto = 1.0, 1.0, "Tabla: Sin datos"
-if tabla and id_l in tabla and id_v in tabla:
-    t_l = tabla[id_l]
-    t_v = tabla[id_v]
-    factor_lh_tabla, factor_la_tabla, tabla_texto = calcular_factor_tabla(
-        t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
+    (
+        (c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v),
+        (contexto_noticias, penalty_local, penalty_visita),
+        factor_calibracion,
+        (forma_local_atk, forma_local_def, forma_local_txt),
+        (forma_visita_atk, forma_visita_def, forma_visita_txt),
+        tabla
+    ) = await asyncio.gather(
+        obtener_datos_mercado(l_q),
+        obtener_contexto_real(l_q, v_q),
+        obtener_factor_calibracion(),
+        obtener_forma_reciente(id_l),
+        obtener_forma_reciente(id_v),
+        obtener_posiciones_tabla()
     )
 
-# --- PASO 4b: Ajuste Elo dinámico ---
-factor_lh_elo, factor_la_elo, elo_texto = 1.0, 1.0, "Elo: Sin datos"
-if elos and id_l in elos and id_v in elos:
-    factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
+    # H2H desde JSON (síncrono, ya está en cache de memoria)
+    h2h, check_h2h, home_wins, away_wins, total_h2h, fuente_h2h = obtener_h2h_json(id_l, id_v, full_data)
 
-# --- PASO 5: Combinar todos los factores ---
-lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
-la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
+    elos = await calcular_elo_equipos(tabla)
 
-# --- PASO 6: Probabilidad Poisson 7x7 + Dixon-Coles ---
-prob_poisson = 0
-for x in range(7):
-    for y in range(7):
-        p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
-        if x > y:
-            prob_poisson += p
+    # --- PASO 1: Lambdas base ---
+    avg = full_data[liga]['averages']
+    lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
 
-# --- PASO 7: Calibración histórica ---
-prob_poisson_calibrado = prob_poisson * factor_calibracion
+    # --- PASO 2: Ajuste H2H ---
+    factor_lh_h2h, factor_la_h2h, h2h_texto = calcular_factor_h2h(home_wins, away_wins, total_h2h)
 
-# --- PASO 8: Normalización simple + Shin ---
-overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
-prob_simple_l = (1 / c_l) / overround
-prob_simple_e = (1 / c_e) / overround
-prob_simple_v = (1 / c_v) / overround
+    # --- PASO 3: Ajuste forma reciente ---
+    factor_lh_forma = forma_local_atk
+    factor_la_forma = forma_visita_atk
 
-prob_market_simple = prob_simple_l
+    # --- PASO 4: Ajuste tabla ---
+    factor_lh_tabla, factor_la_tabla, tabla_texto = 1.0, 1.0, "Tabla: Sin datos"
+    if tabla and id_l in tabla and id_v in tabla:
+        t_l = tabla[id_l]
+        t_v = tabla[id_v]
+        factor_lh_tabla, factor_la_tabla, tabla_texto = calcular_factor_tabla(
+            t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
+        )
 
-shin_l, shin_e, shin_v, shin_z = calcular_shin(c_l, c_e, c_v)
+    # --- PASO 4b: Ajuste Elo dinámico ---
+    factor_lh_elo, factor_la_elo, elo_texto = 1.0, 1.0, "Elo: Sin datos"
+    if elos and id_l in elos and id_v in elos:
+        factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
 
-divergencia_shin = abs(shin_l - prob_simple_l)
-shin_confianza, shin_factor, shin_z_txt = interpretar_shin(divergencia_shin, shin_z)
+    # --- PASO 5: Combinar todos los factores ---
+    lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
+    la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
 
-prob_market_l = (prob_simple_l + shin_l) / 2
-prob_market_e = (prob_simple_e + shin_e) / 2
-prob_market_v = (prob_simple_v + shin_v) / 2
+    # --- PASO 6: Probabilidad Poisson 7x7 + Dixon-Coles ---
+    prob_poisson = 0
+    for x in range(7):
+        for y in range(7):
+            p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
+            if x > y:
+                prob_poisson += p
 
-p_win = (prob_poisson_calibrado * 0.90) + (prob_market_l * 0.10)
-p_percent = p_win * 100
+    # --- PASO 7: Calibración histórica ---
+    prob_poisson_calibrado = prob_poisson * factor_calibracion
 
-# --- PASO 9: Over/Under ---
-ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
+    # --- PASO 8: Normalización simple + Shin ---
+    overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
+    prob_simple_l = (1 / c_l) / overround
+    prob_simple_e = (1 / c_e) / overround
+    prob_simple_v = (1 / c_v) / overround
 
-# --- PASO 10: Probabilidades Poisson para los 3 resultados ---
-prob_poisson_empate = 0
-prob_poisson_visita = 0
-for x in range(7):
-    for y in range(7):
-        p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
-        if x == y:
-            prob_poisson_empate += p
-        elif y > x:
-            prob_poisson_visita += p
+    prob_market_simple = prob_simple_l
 
-prob_poisson_calibrado_local   = prob_poisson * factor_calibracion
-prob_poisson_empate_cal        = prob_poisson_empate * factor_calibracion
-prob_poisson_visita_cal        = prob_poisson_visita * factor_calibracion
+    shin_l, shin_e, shin_v, shin_z = calcular_shin(c_l, c_e, c_v)
 
-p_win = prob_poisson_calibrado_local
+    divergencia_shin = abs(shin_l - prob_simple_l)
+    shin_confianza, shin_factor, shin_z_txt = interpretar_shin(divergencia_shin, shin_z)
 
-margen_error = 0.005
+    prob_market_l = (prob_simple_l + shin_l) / 2
+    prob_market_e = (prob_simple_e + shin_e) / 2
+    prob_market_v = (prob_simple_v + shin_v) / 2
 
-edge_local_raw  = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
-edge_empate     = (prob_poisson_empate_cal - prob_market_e - margen_error) * shin_factor
-edge_visita     = (prob_poisson_visita_cal - prob_market_v - margen_error) * shin_factor
+    p_win = (prob_poisson_calibrado * 0.90) + (prob_market_l * 0.10)
+    p_percent = p_win * 100
 
-edge_ajustado = edge_local_raw
+    # --- PASO 9: Over/Under ---
+    ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
-if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
-    edge_ajustado = -0.001
-if 1.90 <= c_e <= 2.10 and edge_empate < 0.02:
-    edge_empate = -0.001
-if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
-    edge_visita = -0.001
+    # --- PASO 10: Probabilidades Poisson para los 3 resultados ---
+    prob_poisson_empate = 0
+    prob_poisson_visita = 0
+    for x in range(7):
+        for y in range(7):
+            p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
+            if x == y:
+                prob_poisson_empate += p
+            elif y > x:
+                prob_poisson_visita += p
 
-if c_e < 3.0:
-    edge_ajustado *= 0.80
-    edge_empate   *= 0.80
-    edge_visita   *= 0.80
-    empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge reducido 20% en los 3 resultados"
-else:
-    empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
+    prob_poisson_calibrado_local   = prob_poisson * factor_calibracion
+    prob_poisson_empate_cal        = prob_poisson_empate * factor_calibracion
+    prob_poisson_visita_cal        = prob_poisson_visita * factor_calibracion
 
-candidatos = []
-if edge_ajustado > 0:
-    candidatos.append(("local",   edge_ajustado, c_l, m_l,     prob_poisson_calibrado_local * 100))
-if edge_empate > 0:
-    candidatos.append(("empate",  edge_empate,   c_e, "Empate", prob_poisson_empate_cal * 100))
-if edge_visita > 0:
-    candidatos.append(("visita",  edge_visita,   c_v, m_v,      prob_poisson_visita_cal * 100))
+    p_win = prob_poisson_calibrado_local
 
-pick_riesgo_nombre = None
-stake_riesgo       = 0
-nivel_riesgo       = ""
-edge_riesgo        = 0
-prob_riesgo        = 0
-pick_riesgo_cuota  = 0
+    margen_error = 0.005
 
-if candidatos:
-    candidatos.sort(key=lambda c: c[1], reverse=True)
-    tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
+    edge_local_raw  = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
+    edge_empate     = (prob_poisson_empate_cal - prob_market_e - margen_error) * shin_factor
+    edge_visita     = (prob_poisson_visita_cal - prob_market_v - margen_error) * shin_factor
 
-    kelly_fraccion    = 0.25 * shin_factor
-    kelly_full        = edge_principal / (cuota_pick - 1)
-    kelly_fraccionado = kelly_full * kelly_fraccion
-    stake_base        = round(kelly_fraccionado * 100, 2)
-    stake             = round(stake_base * ou_factor, 2)
-    stake             = max(0.25, min(stake, 3.0))
-    pick_final        = nombre_pick
-    p_percent         = prob_pick_pct
+    edge_ajustado = edge_local_raw
 
-    if stake < 0.75:
-        nivel = "BRONCE 🥉"
-    elif stake < 1.25:
-        nivel = "PLATA 🥈"
-    elif stake < 2.0:
-        nivel = "ORO 🥇"
+    if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
+        edge_ajustado = -0.001
+    if 1.90 <= c_e <= 2.10 and edge_empate < 0.02:
+        edge_empate = -0.001
+    if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
+        edge_visita = -0.001
+
+    if c_e < 3.0:
+        edge_ajustado *= 0.80
+        edge_empate   *= 0.80
+        edge_visita   *= 0.80
+        empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge reducido 20% en los 3 resultados"
     else:
-        nivel = "DIAMANTE 💎"
+        empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
 
-    if len(candidatos) > 1:
-        _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
-        kelly_riesgo  = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
-        stake_riesgo  = round(min(max(kelly_riesgo * 100, 0.25), 1.0), 2)
-        if stake_riesgo < 0.50:
-            nivel_riesgo = "RIESGO BAJO ⚠️"
-        elif stake_riesgo < 0.75:
-            nivel_riesgo = "RIESGO MEDIO 🎲"
+    candidatos = []
+    if edge_ajustado > 0:
+        candidatos.append(("local",   edge_ajustado, c_l, m_l,     prob_poisson_calibrado_local * 100))
+    if edge_empate > 0:
+        candidatos.append(("empate",  edge_empate,   c_e, "Empate", prob_poisson_empate_cal * 100))
+    if edge_visita > 0:
+        candidatos.append(("visita",  edge_visita,   c_v, m_v,      prob_poisson_visita_cal * 100))
+
+    pick_riesgo_nombre = None
+    stake_riesgo       = 0
+    nivel_riesgo       = ""
+    edge_riesgo        = 0
+    prob_riesgo        = 0
+    pick_riesgo_cuota  = 0
+
+    if candidatos:
+        candidatos.sort(key=lambda c: c[1], reverse=True)
+        tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
+
+        kelly_fraccion    = 0.25 * shin_factor
+        kelly_full        = edge_principal / (cuota_pick - 1)
+        kelly_fraccionado = kelly_full * kelly_fraccion
+        stake_base        = round(kelly_fraccionado * 100, 2)
+        stake             = round(stake_base * ou_factor, 2)
+        stake             = max(0.25, min(stake, 3.0))
+        pick_final        = nombre_pick
+        p_percent         = prob_pick_pct
+
+        if stake < 0.75:
+            nivel = "BRONCE 🥉"
+        elif stake < 1.25:
+            nivel = "PLATA 🥈"
+        elif stake < 2.0:
+            nivel = "ORO 🥇"
         else:
-            nivel_riesgo = "RIESGO ALTO 🔴"
-else:
-    nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
-    ou_factor     = 1.0
-    tipo_pick     = "ninguno"
-    cuota_pick    = 0
-    prob_pick_pct = 0
-    edge_principal = 0
-    nombre_pick   = "No Bet"
+            nivel = "DIAMANTE 💎"
 
-# --- Guardado en Historial ---
-fecha_hoy = (datetime.now(timezone.utc) + timedelta(hours=OFFSET_JUAREZ)).strftime('%Y-%m-%d %H:%M')
-registro = {
-    "fecha": fecha_hoy,
-    "partido": f"{m_l} vs {m_v}",
-    "pick": pick_final,
-    "poisson": f"{p_percent:.1f}%",
-    "cuota": cuota_pick if pick_final != "No Bet" else c_l,
-    "edge": f"{edge_principal*100:.1f}%" if pick_final != "No Bet" else "0.0%",
-    "stake": f"{stake}%",
-    "nivel": nivel,
-    "pick_riesgo": pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo",
-    "stake_riesgo": f"{stake_riesgo}%" if stake_riesgo else "0%",
-    "status": "⏳ PENDIENTE"
-}
-
-async def task_github():
-    try:
-        logging.info(f"[GitHub] Guardando historial: {registro['partido']} → {registro['pick']}")
-        await guardar_en_github(nuevo_registro=registro)
-    except Exception as e:
-        logging.error(f"[GitHub] task_github excepción: {e}", exc_info=True)
-
-clave_partido = f"{m_l}_vs_{m_v}_{fecha_hoy[:10]}"
-ahora = datetime.now(timezone.utc)
-
-ya_en_ram = (
-    clave_partido in COOLDOWN and
-    (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60
-)
-
-async def ya_en_github():
-    try:
-        url_hist = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
-        r = await asyncio.to_thread(requests.get, url_hist, timeout=10)
-        if r.status_code != 200:
-            return False
-        historial_gh = r.json()
-        fecha_hoy_str = fecha_hoy[:10]
-        partido_key = f"{m_l} vs {m_v}"
-        return any(
-            h.get("partido") == partido_key and h.get("fecha", "")[:10] == fecha_hoy_str
-            for h in historial_gh
-        )
-    except:
-        return False
-
-if ya_en_ram:
-    logging.info(f"[Cooldown RAM] Ignorando duplicado para {clave_partido}")
-else:
-    duplicado_github = await ya_en_github()
-    if duplicado_github:
-        logging.info(f"[Cooldown GitHub] Ya existe registro para {clave_partido}, omitiendo guardado.")
+        if len(candidatos) > 1:
+            _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
+            kelly_riesgo  = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
+            stake_riesgo  = round(min(max(kelly_riesgo * 100, 0.25), 1.0), 2)
+            if stake_riesgo < 0.50:
+                nivel_riesgo = "RIESGO BAJO ⚠️"
+            elif stake_riesgo < 0.75:
+                nivel_riesgo = "RIESGO MEDIO 🎲"
+            else:
+                nivel_riesgo = "RIESGO ALTO 🔴"
     else:
-        COOLDOWN[clave_partido] = ahora
-        asyncio.create_task(task_github())
+        nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
+        ou_factor     = 1.0
+        tipo_pick     = "ninguno"
+        cuota_pick    = 0
+        prob_pick_pct = 0
+        edge_principal = 0
+        nombre_pick   = "No Bet"
 
-# --- Construir textos resumen ---
-calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
-h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
-serper_txt = ""
-if penalty_local < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
-if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
-if not serper_txt: serper_txt = " Sin bajas detectadas"
+    # --- Guardado en Historial ---
+    fecha_hoy = (datetime.now(timezone.utc) + timedelta(hours=OFFSET_JUAREZ)).strftime('%Y-%m-%d %H:%M')
+    registro = {
+        "fecha": fecha_hoy,
+        "partido": f"{m_l} vs {m_v}",
+        "pick": pick_final,
+        "poisson": f"{p_percent:.1f}%",
+        "cuota": cuota_pick if pick_final != "No Bet" else c_l,
+        "edge": f"{edge_principal*100:.1f}%" if pick_final != "No Bet" else "0.0%",
+        "stake": f"{stake}%",
+        "nivel": nivel,
+        "pick_riesgo": pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo",
+        "stake_riesgo": f"{stake_riesgo}%" if stake_riesgo else "0%",
+        "status": "⏳ PENDIENTE"
+    }
 
-tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
+    async def task_github():
+        try:
+            logging.info(f"[GitHub] Guardando historial: {registro['partido']} → {registro['pick']}")
+            await guardar_en_github(nuevo_registro=registro)
+        except Exception as e:
+            logging.error(f"[GitHub] task_github excepción: {e}", exc_info=True)
 
-if pick_final == "No Bet":
-    if pick_riesgo_nombre:
-        decision_block = (
-            f"<b>╔{'═'*22}╗</b>\n"
-            f"<b>║  🚫 NO BET — SIN VALOR      ║</b>\n"
-            f"<b>╠{'═'*22}╣</b>\n"
-            f"<b>║  {nivel_riesgo:<22}║</b>\n"
-            f"<b>║  🎲 {pick_riesgo_nombre:<20}║</b>\n"
-            f"<b>║  💰 Stake: {stake_riesgo}% (riesgo){' '*(8-len(str(stake_riesgo)))}║</b>\n"
-            f"<b>║  📈 Prob: {prob_riesgo:.1f}%  Edge: {edge_riesgo*100:.1f}%{' '*(6-len(f'{prob_riesgo:.1f}'))}║</b>\n"
-            f"<b>╚{'═'*22}╝</b>\n"
-        )
-    else:
-        decision_block = (
-            f"<b>╔{'═'*22}╗</b>\n"
-            f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
-            f"<b>╚{'═'*22}╝</b>\n"
-        )
-else:
-    decision_block = (
-        f"<b>╔{'═'*22}╗</b>\n"
-        f"<b>║  {nivel:<22}║</b>\n"
-        f"<b>║  {tipo_emoji} {pick_final:<20}║</b>\n"
-        f"<b>║  💰 Stake: {stake}% del bankroll{' '*(9-len(str(stake)))}║</b>\n"
-        f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_principal*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
-        f"<b>╚{'═'*22}╝</b>\n"
+    clave_partido = f"{m_l}_vs_{m_v}_{fecha_hoy[:10]}"
+    ahora = datetime.now(timezone.utc)
+
+    ya_en_ram = (
+        clave_partido in COOLDOWN and
+        (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60
     )
 
-p_local_pct   = prob_poisson_calibrado_local * 100
-p_empate_pct  = prob_poisson_empate_cal * 100
-p_visita_pct  = prob_poisson_visita_cal * 100
+    async def ya_en_github():
+        try:
+            url_hist = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+            r = await asyncio.to_thread(requests.get, url_hist, timeout=10)
+            if r.status_code != 200:
+                return False
+            historial_gh = r.json()
+            fecha_hoy_str = fecha_hoy[:10]
+            partido_key = f"{m_l} vs {m_v}"
+            return any(
+                h.get("partido") == partido_key and h.get("fecha", "")[:10] == fecha_hoy_str
+                for h in historial_gh
+            )
+        except:
+            return False
 
-n_elo = len([m for m in (_PARTIDOS_FD_CACHE.get("data") or []) if m["score"].get("winner")])
-elo_src_txt = f"{n_elo} partidos temporada actual"
+    if ya_en_ram:
+        logging.info(f"[Cooldown RAM] Ignorando duplicado para {clave_partido}")
+    else:
+        duplicado_github = await ya_en_github()
+        if duplicado_github:
+            logging.info(f"[Cooldown GitHub] Ya existe registro para {clave_partido}, omitiendo guardado.")
+        else:
+            COOLDOWN[clave_partido] = ahora
+            asyncio.create_task(task_github())
 
-signals_block = (
-    f"\n<b>◆ SEÑALES</b>\n"
-    f"<code>"
-    f"Poisson  🏠 {p_local_pct:.1f}%  🤝 {p_empate_pct:.1f}%  🚩 {p_visita_pct:.1f}%\n"
-    f"λH {lh:.2f}  λA {la:.2f}\n"
-    f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
-    f"Mercado  Simple 🏠{prob_simple_l*100:.1f}% 🤝{prob_simple_e*100:.1f}% 🚩{prob_simple_v*100:.1f}%\n"
-    f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
-    f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
-    f"Rango L  [{rango_l[0]}–{rango_l[1]}]  Rango V [{rango_v[0]}–{rango_v[1]}]\n"
-    f"Casas    {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
-    f"Calib    ×{calib_txt}  {ou_texto[:28]}\n"
-    f"Empate   {empate_aviso[:38]}"
-    f"</code>\n"
-)
+    # --- Construir textos resumen ---
+    calib_txt = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
+    h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
+    serper_txt = ""
+    if penalty_local < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
+    if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
+    if not serper_txt: serper_txt = " Sin bajas detectadas"
 
-# Indicador H2H con fuente explícita
-if check_h2h:
-    h2h_indicador = f"✅ H2H ({fuente_h2h})"
-else:
-    h2h_indicador = "⚠️ H2H (sin datos)"
+    tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
 
-context_block = (
-    f"\n<b>◆ CONTEXTO</b>\n"
-    f"<b>H2H</b> {h2h_texto} → {h2h_ajuste_txt}\n"
-    f"<b>🏠</b> {forma_local_txt}\n"
-    f"<b>🚩</b> {forma_visita_txt}\n"
-    f"<b>🏆</b> {tabla_texto}\n"
-    f"<b>⚡</b> {elo_texto} <i>({elo_src_txt})</i>\n"
-    f"<b>📰</b>{serper_txt}\n"
-    f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {h2h_indicador}</b>\n"
-)
+    if pick_final == "No Bet":
+        if pick_riesgo_nombre:
+            decision_block = (
+                f"<b>╔{'═'*22}╗</b>\n"
+                f"<b>║  🚫 NO BET — SIN VALOR      ║</b>\n"
+                f"<b>╠{'═'*22}╣</b>\n"
+                f"<b>║  {nivel_riesgo:<22}║</b>\n"
+                f"<b>║  🎲 {pick_riesgo_nombre:<20}║</b>\n"
+                f"<b>║  💰 Stake: {stake_riesgo}% (riesgo){' '*(8-len(str(stake_riesgo)))}║</b>\n"
+                f"<b>║  📈 Prob: {prob_riesgo:.1f}%  Edge: {edge_riesgo*100:.1f}%{' '*(6-len(f'{prob_riesgo:.1f}'))}║</b>\n"
+                f"<b>╚{'═'*22}╝</b>\n"
+            )
+        else:
+            decision_block = (
+                f"<b>╔{'═'*22}╗</b>\n"
+                f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
+                f"<b>╚{'═'*22}╝</b>\n"
+            )
+    else:
+        decision_block = (
+            f"<b>╔{'═'*22}╗</b>\n"
+            f"<b>║  {nivel:<22}║</b>\n"
+            f"<b>║  {tipo_emoji} {pick_final:<20}║</b>\n"
+            f"<b>║  💰 Stake: {stake}% del bankroll{' '*(9-len(str(stake)))}║</b>\n"
+            f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_principal*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
+            f"<b>╚{'═'*22}╝</b>\n"
+        )
 
-header = decision_block + signals_block + context_block
+    p_local_pct   = prob_poisson_calibrado_local * 100
+    p_empate_pct  = prob_poisson_empate_cal * 100
+    p_visita_pct  = prob_poisson_visita_cal * 100
 
-prompt_e = f"""
-```
+    n_elo = len([m for m in (_PARTIDOS_FD_CACHE.get("data") or []) if m["score"].get("winner")])
+    elo_src_txt = f"{n_elo} partidos temporada actual"
 
+    signals_block = (
+        f"\n<b>◆ SEÑALES</b>\n"
+        f"<code>"
+        f"Poisson  🏠 {p_local_pct:.1f}%  🤝 {p_empate_pct:.1f}%  🚩 {p_visita_pct:.1f}%\n"
+        f"λH {lh:.2f}  λA {la:.2f}\n"
+        f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
+        f"Mercado  Simple 🏠{prob_simple_l*100:.1f}% 🤝{prob_simple_e*100:.1f}% 🚩{prob_simple_v*100:.1f}%\n"
+        f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
+        f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
+        f"Rango L  [{rango_l[0]}–{rango_l[1]}]  Rango V [{rango_v[0]}–{rango_v[1]}]\n"
+        f"Casas    {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
+        f"Calib    ×{calib_txt}  {ou_texto[:28]}\n"
+        f"Empate   {empate_aviso[:38]}"
+        f"</code>\n"
+    )
+
+    # Indicador H2H con fuente explícita
+    if check_h2h:
+        h2h_indicador = f"✅ H2H ({fuente_h2h})"
+    else:
+        h2h_indicador = "⚠️ H2H (sin datos)"
+
+    context_block = (
+        f"\n<b>◆ CONTEXTO</b>\n"
+        f"<b>H2H</b> {h2h_texto} → {h2h_ajuste_txt}\n"
+        f"<b>🏠</b> {forma_local_txt}\n"
+        f"<b>🚩</b> {forma_visita_txt}\n"
+        f"<b>🏆</b> {tabla_texto}\n"
+        f"<b>⚡</b> {elo_texto} <i>({elo_src_txt})</i>\n"
+        f"<b>📰</b>{serper_txt}\n"
+        f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {h2h_indicador}</b>\n"
+    )
+
+    header = decision_block + signals_block + context_block
+
+    prompt_e = f"""
 Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en alguno de los tres resultados posibles del partido.
 
 ═══════════════════════════════════════
@@ -1203,16 +1154,16 @@ PARTIDO: {m_l} vs {m_v}
 • Prob. victoria visitante (modelo): {p_visita_pct:.1f}%  | λA: {la:.2f} goles esperados
 • Lambda local BASE (sin ajustes): {lh_base:.2f}
 • Lambda visitante BASE (sin ajustes): {la_base:.2f}
-• Factor calibración histórica: ×{factor_calibracion:.2f} {’(modelo sobreestima)’ if factor_calibracion < 1 else ‘(modelo subestima)’ if factor_calibracion > 1 else ‘(sin datos aún)’}
+• Factor calibración histórica: ×{factor_calibracion:.2f} {'(modelo sobreestima)' if factor_calibracion < 1 else '(modelo subestima)' if factor_calibracion > 1 else '(sin datos aún)'}
 
 ── MERCADO DE CUOTAS ──
 • Cuota local: {c_l} → prob. implícita bruta: {(1/c_l)*100:.1f}%
 • Cuota empate: {c_e} → prob. implícita bruta: {(1/c_e)*100:.1f}%
 • Cuota visitante: {c_v} → prob. implícita bruta: {(1/c_v)*100:.1f}%
 • Overround (margen casa): {overround:.4f} ({(overround-1)*100:.2f}% de margen)
-• Casas usadas ({len(casas_usadas)}): {’, ’.join(casas_usadas) if casas_usadas else ‘valores default’}
-• Rango cuota local: {rango_l[0]} – {rango_l[1]} ({‘mercado dividido’ if rango_l[1]-rango_l[0] > 0.10 else ‘mercado consensuado’})
-• Rango cuota visitante: {rango_v[0]} – {rango_v[1]} ({‘mercado dividido’ if rango_v[1]-rango_v[0] > 0.10 else ‘mercado consensuado’})
+• Casas usadas ({len(casas_usadas)}): {', '.join(casas_usadas) if casas_usadas else 'valores default'}
+• Rango cuota local: {rango_l[0]} – {rango_l[1]} ({'mercado dividido' if rango_l[1]-rango_l[0] > 0.10 else 'mercado consensuado'})
+• Rango cuota visitante: {rango_v[0]} – {rango_v[1]} ({'mercado dividido' if rango_v[1]-rango_v[0] > 0.10 else 'mercado consensuado'})
 
 ── MÉTODO SHIN (1993) vs NORMALIZACIÓN SIMPLE ──
 • Prob. local normalización simple: {prob_market_simple*100:.1f}%
@@ -1252,7 +1203,7 @@ PARTIDO: {m_l} vs {m_v}
 ── ELO DINÁMICO (temporada actual, con bonus campo +50 pts) ──
 • {elo_texto}
 • Factor Elo local: ×{factor_lh_elo:.4f} | Factor Elo visita: ×{factor_la_elo:.4f}
-• Elo local: {elos.get(id_l, ‘N/A’) if isinstance(elos.get(id_l), str) else f”{elos.get(id_l, 0):.0f}”} pts | Elo visita: {elos.get(id_v, ‘N/A’) if isinstance(elos.get(id_v), str) else f”{elos.get(id_v, 0):.0f}”} pts
+• Elo local: {elos.get(id_l, 'N/A') if isinstance(elos.get(id_l), str) else f"{elos.get(id_l, 0):.0f}"} pts | Elo visita: {elos.get(id_v, 'N/A') if isinstance(elos.get(id_v), str) else f"{elos.get(id_v, 0):.0f}"} pts
 • Base: {elo_src_txt}
 
 ── BAJAS Y NOTICIAS (SERPER + JINA) ──
@@ -1260,8 +1211,8 @@ PARTIDO: {m_l} vs {m_v}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
 
 ── PICK DE RIESGO ALTERNATIVO ──
-• Pick de riesgo: {pick_riesgo_nombre if pick_riesgo_nombre else “Sin valor alternativo”}
-• Cuota: {pick_riesgo_cuota if pick_riesgo_cuota else “N/A”}
+• Pick de riesgo: {pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"}
+• Cuota: {pick_riesgo_cuota if pick_riesgo_cuota else "N/A"}
 • Stake sugerido: {stake_riesgo}% (cap 1.0%, Kelly×0.25)
 
 ═══════════════════════════════════════
@@ -1269,372 +1220,366 @@ RESULTADO DEL MODELO
 🎯 PICK PRINCIPAL: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
-🎲 PICK RIESGO: {pick_riesgo_nombre if pick_riesgo_nombre else “Sin valor alternativo”}
+🎲 PICK RIESGO: {pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"}
 ═══════════════════════════════════════
 
 INSTRUCCIONES PARA TU ANÁLISIS:
-
 1. El sistema ya evaluó los tres resultados (local, empate, visitante) y eligió el de mayor edge positivo como pick principal.
-- Si el pick es “No Bet”, todos los edges son negativos → no hay valor en ningún resultado.
-- Si hay pick de riesgo, menciona brevemente por qué puede ser interesante pero aclara su mayor riesgo.
-1. Redacta un análisis de máximo 130 palabras que integre:
+   - Si el pick es "No Bet", todos los edges son negativos → no hay valor en ningún resultado.
+   - Si hay pick de riesgo, menciona brevemente por qué puede ser interesante pero aclara su mayor riesgo.
+2. Redacta un análisis de máximo 130 palabras que integre:
    a) Por qué el pick seleccionado tiene valor (edge modelo vs mercado).
    b) Si Shin y normalización simple coinciden o divergen, y qué implica.
    c) Si la forma reciente y la tabla refuerzan o contradicen el pronóstico.
    d) Si el H2H en sede favorece al resultado elegido.
    e) Si hay bajas relevantes y cómo afectan las lambdas.
    f) Si el O/U confirma o contradice la apuesta.
-1. Sé directo, técnico y conciso. No repitas los números exactos del header, interprétalos.
-   “””
-   
-   analisis_raw = await ejecutar_ia(“estratega”, prompt_e)
-   analisis = html.escape(analisis_raw)
-   
-   nodos_txt = f”🛰 <code>{SISTEMA_IA[‘estratega’][‘api’]}</code>”
-   
-   if SISTEMA_IA[“auditor”][“nodo”]:
-   prompt_a = (
-   f”ERES AUDITOR INDEPENDIENTE de apuestas deportivas. Tu misión es evaluar si el pick del modelo “
-   f”es correcto basándote EXCLUSIVAMENTE en los datos crudos. NO has leído ningún análisis previo.\n\n”
-   f”PARTIDO: {m_l} vs {m_v}\n\n”
-   f”── DATOS CRUDOS ──\n”
-   f”Pick del modelo: {pick_final} | Nivel: {nivel} | Stake: {stake}%\n”
-   f”Edge local: {edge_ajustado*100:.2f}% | Edge empate: {edge_empate*100:.2f}% | Edge visitante: {edge_visita*100:.2f}%\n”
-   f”Prob. modelo: Local {p_local_pct:.1f}% | Empate {p_empate_pct:.1f}% | Visita {p_visita_pct:.1f}%\n”
-   f”Prob. mercado: Local {prob_market_l*100:.1f}% | Empate {prob_market_e*100:.1f}% | Visita {prob_market_v*100:.1f}%\n”
-   f”λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n\n”
-   f”── CONTEXTO ──\n”
-   f”H2H ({fuente_h2h}): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n”
-   f”Forma local: {forma_local_txt} | Forma visita: {forma_visita_txt}\n”
-   f”Tabla: {tabla_texto}\n”
-   f”Elo: {elo_texto}\n”
-   f”Bajas: {serper_txt}\n”
-   f”Noticias: {contexto_noticias[:300]}\n\n”
-   f”── TU TAREA ──\n”
-   f”En máximo 60 palabras: ¿Los datos respaldan o contradicen el pick? “
-   f”Señala la contradicción más importante si existe, o confirma la coherencia. “
-   f”Sé directo. No repitas números ya visibles en el header.”
-   )
-   auditoria_raw = await ejecutar_ia(“auditor”, prompt_a)
-   nodos_txt += f” · 🛡 <code>{SISTEMA_IA[‘auditor’][‘api’]}</code>”
-   auditor_block = f”\n\n<b>◆ AUDITOR</b>\n{html.escape(auditoria_raw)}”
-   else:
-   auditor_block = “”
-   
-   footer = f”\n\n<i>{’—’*18}\nV11 · {nodos_txt}</i>”
-   final = f”{header}{analisis}{auditor_block}{footer}”
-   
-   await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode=‘HTML’)
+3. Sé directo, técnico y conciso. No repitas los números exactos del header, interprétalos.
+"""
 
-# ============================================================
+    analisis_raw = await ejecutar_ia("estratega", prompt_e)
+    analisis = html.escape(analisis_raw)
 
-# Comandos Adicionales (sin cambios)
+    nodos_txt = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
-# ============================================================
-
-@bot.message_handler(commands=[‘stats’])
-async def cmd_stats(message):
-url = f”https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}”
-try:
-r = await asyncio.to_thread(requests.get, url, timeout=10)
-historial = r.json()
-if not historial:
-await bot.reply_to(message, “📭 Sin historial.”); return
-
-```
-    completados = [h for h in historial if h.get('status') in ('✅ WIN', '❌ LOSS')]
-    voided = [h for h in historial if h.get('status') == '➖ VOID']
-    pendientes = [h for h in historial if h.get('status') == '⏳ PENDIENTE']
-
-    if not completados:
-        await bot.reply_to(message, "📊 Sin resultados completos aún."); return
-
-    wins = sum(1 for h in completados if h['status'] == '✅ WIN')
-    losses = len(completados) - wins
-    pct_aciertos = (wins / len(completados)) * 100
-
-    roi_total = 0
-    invertido_total = 0
-    for h in completados:
-        stake_val = float(str(h.get('stake', '0')).replace('%', ''))
-        cuota_val = float(h.get('cuota', 1.0))
-        if stake_val > 0:
-            invertido_total += stake_val
-            if h['status'] == '✅ WIN':
-                roi_total += stake_val * (cuota_val - 1)
-            else:
-                roi_total -= stake_val
-    roi_pct = (roi_total / invertido_total * 100) if invertido_total > 0 else 0
-
-    racha = 0
-    racha_tipo = ""
-    for h in reversed(completados):
-        if racha == 0:
-            racha_tipo = h['status']
-            racha = 1
-        elif h['status'] == racha_tipo:
-            racha += 1
-        else:
-            break
-    racha_emoji = "🔥" if racha_tipo == "✅ WIN" else "❄️"
-
-    niveles_stats = {}
-    for h in completados:
-        niv = h.get('nivel', 'Desconocido').split(' ')[0]
-        if niv not in niveles_stats:
-            niveles_stats[niv] = {'w': 0, 'l': 0}
-        if h['status'] == '✅ WIN':
-            niveles_stats[niv]['w'] += 1
-        else:
-            niveles_stats[niv]['l'] += 1
-
-    desglose = ""
-    for niv, datos in niveles_stats.items():
-        total_niv = datos['w'] + datos['l']
-        pct_niv = (datos['w'] / total_niv * 100) if total_niv > 0 else 0
-        desglose += f"  • {niv}: {datos['w']}W/{datos['l']}L ({pct_niv:.0f}%)\n"
-
-    txt = (
-        f"📊 <b>ESTADÍSTICAS DEL BOT</b>\n"
-        f"{'━'*22}\n"
-        f"📈 <b>Aciertos:</b> {wins}/{len(completados)} ({pct_aciertos:.1f}%)\n"
-        f"💰 <b>ROI:</b> {roi_pct:+.2f}%\n"
-        f"{racha_emoji} <b>Racha actual:</b> {racha} {'WIN' if racha_tipo == '✅ WIN' else 'LOSS'} consecutivos\n"
-        f"➖ <b>VOIDs:</b> {len(voided)} | ⏳ <b>Pendientes:</b> {len(pendientes)}\n"
-        f"{'━'*22}\n"
-        f"<b>Desglose por nivel:</b>\n{desglose}"
-    )
-    await bot.reply_to(message, txt, parse_mode='HTML')
-except Exception as e:
-    logging.error(f"Error /stats: {e}")
-    await bot.reply_to(message, "❌ Error al calcular estadísticas.")
-```
-
-@bot.message_handler(commands=[‘historial’])
-async def cmd_historial(message):
-url = f”https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}”
-try:
-r = await asyncio.to_thread(requests.get, url, timeout=10)
-historial = r.json()
-if not historial:
-await bot.reply_to(message, “📭 Historial vacío.”); return
-txt = “📜 <b>HISTORIAL RECIENTE:</b>\n\n”
-for r_item in historial[-10:]:
-txt += f”📅 <code>{r_item[‘fecha’]}</code>\n⚽ <b>{r_item[‘partido’]}</b>\n🎯 Pick: <code>{r_item[‘pick’]}</code> | {r_item[‘status’]}\n{’—’*15}\n”
-await bot.reply_to(message, txt, parse_mode=‘HTML’)
-except:
-await bot.reply_to(message, “❌ Error al leer historial.”)
-
-@bot.message_handler(commands=[‘validar’])
-async def cmd_validar(message):
-msg_espera = await bot.reply_to(message, “🔍 Sincronizando resultados…”)
-url_h = f”https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}”
-try:
-r_hist = await asyncio.to_thread(requests.get, url_h, timeout=10)
-if r_hist.status_code != 200:
-await bot.edit_message_text(“❌ No se pudo leer el historial.”, message.chat.id, msg_espera.message_id); return
-historial_raw = r_hist.json()
-
-```
-    data_api = await api_football_call("matches?status=FINISHED")
-    if not data_api or 'matches' not in data_api:
-        await bot.edit_message_text("❌ Sin resultados desde la API.", message.chat.id, msg_espera.message_id); return
-
-    count = 0
-    for item in historial_raw:
-        if item.get("status") != "⏳ PENDIENTE":
-            continue
-        partido_lower = item['partido'].lower()
-        for m in data_api['matches']:
-            h_api = m['homeTeam']['name'].lower()
-            a_api = m['awayTeam']['name'].lower()
-            local_match = any(p in h_api or h_api in p for p in partido_lower.split(" vs ")[0:1])
-            visita_match = any(p in a_api or a_api in p for p in partido_lower.split(" vs ")[1:2])
-            if local_match and visita_match:
-                winner = m['score'].get('winner')
-                if not winner:
-                    continue
-                item['status'] = evaluar_resultado(
-                    item['pick'], item['partido'], h_api, a_api, winner
-                )
-                item['marcador_real'] = (
-                    f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
-                )
-                count += 1
-                break
-
-    if count > 0:
-        await guardar_en_github(historial_completo=historial_raw)
-        await bot.edit_message_text(
-            f"✅ {count} partido(s) validado(s) y guardados.", message.chat.id, msg_espera.message_id
+    if SISTEMA_IA["auditor"]["nodo"]:
+        prompt_a = (
+            f"ERES AUDITOR INDEPENDIENTE de apuestas deportivas. Tu misión es evaluar si el pick del modelo "
+            f"es correcto basándote EXCLUSIVAMENTE en los datos crudos. NO has leído ningún análisis previo.\n\n"
+            f"PARTIDO: {m_l} vs {m_v}\n\n"
+            f"── DATOS CRUDOS ──\n"
+            f"Pick del modelo: {pick_final} | Nivel: {nivel} | Stake: {stake}%\n"
+            f"Edge local: {edge_ajustado*100:.2f}% | Edge empate: {edge_empate*100:.2f}% | Edge visitante: {edge_visita*100:.2f}%\n"
+            f"Prob. modelo: Local {p_local_pct:.1f}% | Empate {p_empate_pct:.1f}% | Visita {p_visita_pct:.1f}%\n"
+            f"Prob. mercado: Local {prob_market_l*100:.1f}% | Empate {prob_market_e*100:.1f}% | Visita {prob_market_v*100:.1f}%\n"
+            f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n\n"
+            f"── CONTEXTO ──\n"
+            f"H2H ({fuente_h2h}): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
+            f"Forma local: {forma_local_txt} | Forma visita: {forma_visita_txt}\n"
+            f"Tabla: {tabla_texto}\n"
+            f"Elo: {elo_texto}\n"
+            f"Bajas: {serper_txt}\n"
+            f"Noticias: {contexto_noticias[:300]}\n\n"
+            f"── TU TAREA ──\n"
+            f"En máximo 60 palabras: ¿Los datos respaldan o contradicen el pick? "
+            f"Señala la contradicción más importante si existe, o confirma la coherencia. "
+            f"Sé directo. No repitas números ya visibles en el header."
         )
+        auditoria_raw = await ejecutar_ia("auditor", prompt_a)
+        nodos_txt += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
+        auditor_block = f"\n\n<b>◆ AUDITOR</b>\n{html.escape(auditoria_raw)}"
     else:
-        await bot.edit_message_text("ℹ️ No hay partidos nuevos por actualizar.", message.chat.id, msg_espera.message_id)
-except Exception as e:
-    logging.error(f"Error /validar: {e}", exc_info=True)
-    await bot.edit_message_text(f"❌ Fallo en validación: {str(e)[:80]}", message.chat.id, msg_espera.message_id)
-```
+        auditor_block = ""
 
-@bot.message_handler(commands=[‘partidos’])
+    footer = f"\n\n<i>{'—'*18}\nV11 · {nodos_txt}</i>"
+    final = f"{header}{analisis}{auditor_block}{footer}"
+
+    await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode='HTML')
+
+
+# ============================================================
+# Comandos Adicionales (sin cambios)
+# ============================================================
+
+@bot.message_handler(commands=['stats'])
+async def cmd_stats(message):
+    url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+    try:
+        r = await asyncio.to_thread(requests.get, url, timeout=10)
+        historial = r.json()
+        if not historial:
+            await bot.reply_to(message, "📭 Sin historial."); return
+
+        completados = [h for h in historial if h.get('status') in ('✅ WIN', '❌ LOSS')]
+        voided = [h for h in historial if h.get('status') == '➖ VOID']
+        pendientes = [h for h in historial if h.get('status') == '⏳ PENDIENTE']
+
+        if not completados:
+            await bot.reply_to(message, "📊 Sin resultados completos aún."); return
+
+        wins = sum(1 for h in completados if h['status'] == '✅ WIN')
+        losses = len(completados) - wins
+        pct_aciertos = (wins / len(completados)) * 100
+
+        roi_total = 0
+        invertido_total = 0
+        for h in completados:
+            stake_val = float(str(h.get('stake', '0')).replace('%', ''))
+            cuota_val = float(h.get('cuota', 1.0))
+            if stake_val > 0:
+                invertido_total += stake_val
+                if h['status'] == '✅ WIN':
+                    roi_total += stake_val * (cuota_val - 1)
+                else:
+                    roi_total -= stake_val
+        roi_pct = (roi_total / invertido_total * 100) if invertido_total > 0 else 0
+
+        racha = 0
+        racha_tipo = ""
+        for h in reversed(completados):
+            if racha == 0:
+                racha_tipo = h['status']
+                racha = 1
+            elif h['status'] == racha_tipo:
+                racha += 1
+            else:
+                break
+        racha_emoji = "🔥" if racha_tipo == "✅ WIN" else "❄️"
+
+        niveles_stats = {}
+        for h in completados:
+            niv = h.get('nivel', 'Desconocido').split(' ')[0]
+            if niv not in niveles_stats:
+                niveles_stats[niv] = {'w': 0, 'l': 0}
+            if h['status'] == '✅ WIN':
+                niveles_stats[niv]['w'] += 1
+            else:
+                niveles_stats[niv]['l'] += 1
+
+        desglose = ""
+        for niv, datos in niveles_stats.items():
+            total_niv = datos['w'] + datos['l']
+            pct_niv = (datos['w'] / total_niv * 100) if total_niv > 0 else 0
+            desglose += f"  • {niv}: {datos['w']}W/{datos['l']}L ({pct_niv:.0f}%)\n"
+
+        txt = (
+            f"📊 <b>ESTADÍSTICAS DEL BOT</b>\n"
+            f"{'━'*22}\n"
+            f"📈 <b>Aciertos:</b> {wins}/{len(completados)} ({pct_aciertos:.1f}%)\n"
+            f"💰 <b>ROI:</b> {roi_pct:+.2f}%\n"
+            f"{racha_emoji} <b>Racha actual:</b> {racha} {'WIN' if racha_tipo == '✅ WIN' else 'LOSS'} consecutivos\n"
+            f"➖ <b>VOIDs:</b> {len(voided)} | ⏳ <b>Pendientes:</b> {len(pendientes)}\n"
+            f"{'━'*22}\n"
+            f"<b>Desglose por nivel:</b>\n{desglose}"
+        )
+        await bot.reply_to(message, txt, parse_mode='HTML')
+    except Exception as e:
+        logging.error(f"Error /stats: {e}")
+        await bot.reply_to(message, "❌ Error al calcular estadísticas.")
+
+@bot.message_handler(commands=['historial'])
+async def cmd_historial(message):
+    url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+    try:
+        r = await asyncio.to_thread(requests.get, url, timeout=10)
+        historial = r.json()
+        if not historial:
+            await bot.reply_to(message, "📭 Historial vacío."); return
+        txt = "📜 <b>HISTORIAL RECIENTE:</b>\n\n"
+        for r_item in historial[-10:]:
+            txt += f"📅 <code>{r_item['fecha']}</code>\n⚽ <b>{r_item['partido']}</b>\n🎯 Pick: <code>{r_item['pick']}</code> | {r_item['status']}\n{'—'*15}\n"
+        await bot.reply_to(message, txt, parse_mode='HTML')
+    except:
+        await bot.reply_to(message, "❌ Error al leer historial.")
+
+@bot.message_handler(commands=['validar'])
+async def cmd_validar(message):
+    msg_espera = await bot.reply_to(message, "🔍 Sincronizando resultados...")
+    url_h = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
+    try:
+        r_hist = await asyncio.to_thread(requests.get, url_h, timeout=10)
+        if r_hist.status_code != 200:
+            await bot.edit_message_text("❌ No se pudo leer el historial.", message.chat.id, msg_espera.message_id); return
+        historial_raw = r_hist.json()
+
+        data_api = await api_football_call("matches?status=FINISHED")
+        if not data_api or 'matches' not in data_api:
+            await bot.edit_message_text("❌ Sin resultados desde la API.", message.chat.id, msg_espera.message_id); return
+
+        count = 0
+        for item in historial_raw:
+            if item.get("status") != "⏳ PENDIENTE":
+                continue
+            partido_lower = item['partido'].lower()
+            for m in data_api['matches']:
+                h_api = m['homeTeam']['name'].lower()
+                a_api = m['awayTeam']['name'].lower()
+                local_match = any(p in h_api or h_api in p for p in partido_lower.split(" vs ")[0:1])
+                visita_match = any(p in a_api or a_api in p for p in partido_lower.split(" vs ")[1:2])
+                if local_match and visita_match:
+                    winner = m['score'].get('winner')
+                    if not winner:
+                        continue
+                    item['status'] = evaluar_resultado(
+                        item['pick'], item['partido'], h_api, a_api, winner
+                    )
+                    item['marcador_real'] = (
+                        f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
+                    )
+                    count += 1
+                    break
+
+        if count > 0:
+            await guardar_en_github(historial_completo=historial_raw)
+            await bot.edit_message_text(
+                f"✅ {count} partido(s) validado(s) y guardados.", message.chat.id, msg_espera.message_id
+            )
+        else:
+            await bot.edit_message_text("ℹ️ No hay partidos nuevos por actualizar.", message.chat.id, msg_espera.message_id)
+    except Exception as e:
+        logging.error(f"Error /validar: {e}", exc_info=True)
+        await bot.edit_message_text(f"❌ Fallo en validación: {str(e)[:80]}", message.chat.id, msg_espera.message_id)
+
+@bot.message_handler(commands=['partidos'])
 async def cmd_partidos(message):
-from collections import defaultdict
-data = await api_football_call(“matches?status=SCHEDULED”)
-if not data: return
+    from collections import defaultdict
+    data = await api_football_call("matches?status=SCHEDULED")
+    if not data: return
 
-```
-matches = data['matches'][:10]
-if not matches:
-    await bot.reply_to(message, "📭 No hay partidos programados."); return
+    matches = data['matches'][:10]
+    if not matches:
+        await bot.reply_to(message, "📭 No hay partidos programados."); return
 
-dias_es = {
-    'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
-    'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
-}
+    dias_es = {
+        'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles',
+        'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'
+    }
 
-por_fecha = defaultdict(list)
-for m in matches:
-    dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) + timedelta(hours=OFFSET_JUAREZ)
-    fecha_key = dt.strftime('%A %d/%m')
-    for en, es in dias_es.items():
-        fecha_key = fecha_key.replace(en, es)
-    por_fecha[fecha_key].append((dt, m))
+    por_fecha = defaultdict(list)
+    for m in matches:
+        dt = datetime.strptime(m['utcDate'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc) + timedelta(hours=OFFSET_JUAREZ)
+        fecha_key = dt.strftime('%A %d/%m')
+        for en, es in dias_es.items():
+            fecha_key = fecha_key.replace(en, es)
+        por_fecha[fecha_key].append((dt, m))
 
-txt = "⚽ <b>PRÓXIMOS PARTIDOS</b>  <i>· hora Juárez</i>\n"
-for fecha_key, partidos in por_fecha.items():
-    txt += f"\n<b>── {fecha_key} ──</b>\n"
-    for dt, m in partidos:
-        home = m['homeTeam']['shortName']
-        away = m['awayTeam']['shortName']
-        txt += f"<code>{dt.strftime('%H:%M')}</code>  <b>{home}</b> <i>vs</i> <b>{away}</b>\n"
+    txt = "⚽ <b>PRÓXIMOS PARTIDOS</b>  <i>· hora Juárez</i>\n"
+    for fecha_key, partidos in por_fecha.items():
+        txt += f"\n<b>── {fecha_key} ──</b>\n"
+        for dt, m in partidos:
+            home = m['homeTeam']['shortName']
+            away = m['awayTeam']['shortName']
+            txt += f"<code>{dt.strftime('%H:%M')}</code>  <b>{home}</b> <i>vs</i> <b>{away}</b>\n"
 
-ejemplo = f"{matches[0]['homeTeam']['shortName']} vs {matches[0]['awayTeam']['shortName']}"
-txt += f"\n<i>Ej: /pronostico {ejemplo}</i>"
-await bot.reply_to(message, txt, parse_mode='HTML')
-```
+    ejemplo = f"{matches[0]['homeTeam']['shortName']} vs {matches[0]['awayTeam']['shortName']}"
+    txt += f"\n<i>Ej: /pronostico {ejemplo}</i>"
+    await bot.reply_to(message, txt, parse_mode='HTML')
 
-@bot.message_handler(commands=[‘tabla’])
+@bot.message_handler(commands=['tabla'])
 async def cmd_tabla(message):
-data = await api_football_call(“standings”)
-if not data: return
-txt = “🏆 <b>POSICIONES:</b>\n\n”
-for t in data[‘standings’][0][‘table’][:12]:
-txt += f”<code>{t[‘position’]:02d}.</code> <b>{t[‘team’][‘shortName’]}</b> | {t[‘points’]} pts\n”
-await bot.reply_to(message, txt, parse_mode=‘HTML’)
+    data = await api_football_call("standings")
+    if not data: return
+    txt = "🏆 <b>POSICIONES:</b>\n\n"
+    for t in data['standings'][0]['table'][:12]:
+        txt += f"<code>{t['position']:02d}.</code> <b>{t['team']['shortName']}</b> | {t['points']} pts\n"
+    await bot.reply_to(message, txt, parse_mode='HTML')
 
-@bot.message_handler(commands=[‘equipos’])
+@bot.message_handler(commands=['equipos'])
 async def cmd_equipos(message):
-r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
-res = r.json()
-liga = next(iter(res))
-equipos = “, “.join([f”<code>{e}</code>” for e in res[liga][‘teams’].keys()])
-await bot.reply_to(message, f”📋 <b>EQUIPOS JSON:</b>\n\n{equipos}”, parse_mode=‘HTML’)
+    r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
+    res = r.json()
+    liga = next(iter(res))
+    equipos = ", ".join([f"<code>{e}</code>" for e in res[liga]['teams'].keys()])
+    await bot.reply_to(message, f"📋 <b>EQUIPOS JSON:</b>\n\n{equipos}", parse_mode='HTML')
 
-@bot.message_handler(commands=[‘config’])
+@bot.message_handler(commands=['config'])
 async def cmd_config(message):
-markup = InlineKeyboardMarkup().add(InlineKeyboardButton(“🧠 ASIGNAR ESTRATEGA”, callback_data=“set_rol_estratega”))
-await bot.reply_to(message, “🛠 <b>CONFIGURACIÓN DE RED</b>”, reply_markup=markup, parse_mode=‘HTML’)
+    markup = InlineKeyboardMarkup().add(InlineKeyboardButton("🧠 ASIGNAR ESTRATEGA", callback_data="set_rol_estratega"))
+    await bot.reply_to(message, "🛠 <b>CONFIGURACIÓN DE RED</b>", reply_markup=markup, parse_mode='HTML')
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(‘set_rol_’))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_rol_'))
 async def cb_rol(call):
-rol = call.data.split(’*’)[-1]
-markup = InlineKeyboardMarkup().row(
-InlineKeyboardButton(“Groq”, callback_data=f”set_api*{rol}*GROQ”),
-InlineKeyboardButton(“SambaNova”, callback_data=f”set_api*{rol}_SAMBA”)
-)
-await bot.edit_message_text(f”API para {rol.upper()}:”, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    rol = call.data.split('_')[-1]
+    markup = InlineKeyboardMarkup().row(
+        InlineKeyboardButton("Groq", callback_data=f"set_api_{rol}_GROQ"),
+        InlineKeyboardButton("SambaNova", callback_data=f"set_api_{rol}_SAMBA")
+    )
+    await bot.edit_message_text(f"API para {rol.upper()}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(‘set_api_’))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_api_'))
 async def cb_api(call):
-*, *, rol, api = call.data.split(’*’)
-nodos = SISTEMA_IA[“nodos_groq”] if api == ‘GROQ’ else SISTEMA_IA[“nodos_samba”]
-markup = InlineKeyboardMarkup()
-for idx, nombre in enumerate(nodos):
-markup.add(InlineKeyboardButton(nombre, callback_data=f”sv*{rol[0]}*{api[0]}*{idx}”))
-await bot.edit_message_text(f”Selecciona Nodo para {rol.upper()}:”, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    _, _, rol, api = call.data.split('_')
+    nodos = SISTEMA_IA["nodos_groq"] if api == 'GROQ' else SISTEMA_IA["nodos_samba"]
+    markup = InlineKeyboardMarkup()
+    for idx, nombre in enumerate(nodos):
+        markup.add(InlineKeyboardButton(nombre, callback_data=f"sv_{rol[0]}_{api[0]}_{idx}"))
+    await bot.edit_message_text(f"Selecciona Nodo para {rol.upper()}:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith(‘sv_’))
+@bot.callback_query_handler(func=lambda call: call.data.startswith('sv_'))
 async def cb_save(call):
-*, r_init, a_init, idx = call.data.split(’*’)
-rol = “estratega” if r_init == ‘e’ else “auditor”
-api = “GROQ” if a_init == ‘G’ else “SAMBA”
-lista = SISTEMA_IA[“nodos_groq”] if api == “GROQ” else SISTEMA_IA[“nodos_samba”]
-nodo_sel = lista[int(idx)]
-SISTEMA_IA[rol] = {“api”: api, “nodo”: nodo_sel}
-markup = InlineKeyboardMarkup()
-if rol == “estratega”: markup.add(InlineKeyboardButton(“⚖️ AÑADIR AUDITOR”, callback_data=“set_rol_auditor”))
-markup.add(InlineKeyboardButton(“🏁 FINALIZAR”, callback_data=“config_fin”))
-await bot.edit_message_text(f”✅ {rol.upper()} listo: <code>{nodo_sel}</code>”, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode=‘HTML’)
+    _, r_init, a_init, idx = call.data.split('_')
+    rol = "estratega" if r_init == 'e' else "auditor"
+    api = "GROQ" if a_init == 'G' else "SAMBA"
+    lista = SISTEMA_IA["nodos_groq"] if api == "GROQ" else SISTEMA_IA["nodos_samba"]
+    nodo_sel = lista[int(idx)]
+    SISTEMA_IA[rol] = {"api": api, "nodo": nodo_sel}
+    markup = InlineKeyboardMarkup()
+    if rol == "estratega": markup.add(InlineKeyboardButton("⚖️ AÑADIR AUDITOR", callback_data="set_rol_auditor"))
+    markup.add(InlineKeyboardButton("🏁 FINALIZAR", callback_data="config_fin"))
+    await bot.edit_message_text(f"✅ {rol.upper()} listo: <code>{nodo_sel}</code>", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='HTML')
 
-@bot.callback_query_handler(func=lambda call: call.data == “config_fin”)
+@bot.callback_query_handler(func=lambda call: call.data == "config_fin")
 async def cb_fin(call):
-await bot.edit_message_text(“🚀 <b>SISTEMA LISTO</b>”, call.message.chat.id, call.message.message_id, parse_mode=‘HTML’)
+    await bot.edit_message_text("🚀 <b>SISTEMA LISTO</b>", call.message.chat.id, call.message.message_id, parse_mode='HTML')
 
-@bot.message_handler(commands=[‘help’])
+@bot.message_handler(commands=['help'])
 async def cmd_help(message):
-help_text = (
-“🤖 <b>SISTEMA V11.0 PRO</b>\n\n”
-“📈 <b>ANÁLISIS:</b>\n”
-“• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Elo + Odds + Shin + Kelly.\n”
-“• <code>/historial</code>: Últimos pronósticos.\n”
-“• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n”
-“• <code>/validar</code>: Sincroniza resultados GitHub.\n”
-“• <code>/config</code>: Configura IA.\n\n”
-“🛡 <b>ROLES:</b>\n”
-“• <b>[EST]:</b> Estratega (Análisis matemático y Kelly).\n”
-“• <b>[AUD]:</b> Auditor (Redacción y verificación lógica).\n\n”
-“⚽ <b>INFORMACIÓN:</b>\n”
-“• <code>/partidos</code>: Próximos encuentros.\n”
-“• <code>/tabla</code>: Posiciones liga.\n”
-“• <code>/equipos</code>: Lista equipos JSON.\n”
-)
-await bot.reply_to(message, help_text, parse_mode=‘HTML’)
+    help_text = (
+        "🤖 <b>SISTEMA V11.0 PRO</b>\n\n"
+        "📈 <b>ANÁLISIS:</b>\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Elo + Odds + Shin + Kelly.\n"
+        "• <code>/historial</code>: Últimos pronósticos.\n"
+        "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
+        "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
+        "• <code>/config</code>: Configura IA.\n\n"
+        "🛡 <b>ROLES:</b>\n"
+        "• <b>[EST]:</b> Estratega (Análisis matemático y Kelly).\n"
+        "• <b>[AUD]:</b> Auditor (Redacción y verificación lógica).\n\n"
+        "⚽ <b>INFORMACIÓN:</b>\n"
+        "• <code>/partidos</code>: Próximos encuentros.\n"
+        "• <code>/tabla</code>: Posiciones liga.\n"
+        "• <code>/equipos</code>: Lista equipos JSON.\n"
+    )
+    await bot.reply_to(message, help_text, parse_mode='HTML')
 
-WEBHOOK_HOST = “claude-production-e098.up.railway.app”
-WEBHOOK_PATH = f”/{TOKEN}”
-WEBHOOK_URL  = f”https://{WEBHOOK_HOST}{WEBHOOK_PATH}”
-PORT         = int(os.getenv(“PORT”, 8080))
+WEBHOOK_HOST = "claude-production-e098.up.railway.app"
+WEBHOOK_PATH = f"/{TOKEN}"
+WEBHOOK_URL  = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
+PORT         = int(os.getenv("PORT", 8080))
+
 
 async def handle_webhook(request):
-“”“Recibe updates de Telegram y los procesa.”””
-try:
-data = await request.json()
-update = telebot.types.Update.de_json(data)
-await bot.process_new_updates([update])
-except Exception as e:
-logging.error(f”[Webhook] Error procesando update: {e}”)
-return web.Response(text=“OK”)
+    """Recibe updates de Telegram y los procesa."""
+    try:
+        data = await request.json()
+        update = telebot.types.Update.de_json(data)
+        await bot.process_new_updates([update])
+    except Exception as e:
+        logging.error(f"[Webhook] Error procesando update: {e}")
+    return web.Response(text="OK")
+
 
 async def handle_health(request):
-“”“Health check para Railway.”””
-return web.Response(text=“OK”)
+    """Health check para Railway."""
+    return web.Response(text="OK")
+
 
 async def main():
-# Registrar webhook en Telegram
-await bot.remove_webhook()
-await asyncio.sleep(1)
-await bot.set_webhook(url=WEBHOOK_URL)
-logging.info(f”[Arranque] Webhook registrado: {WEBHOOK_URL}”)
+    # Registrar webhook en Telegram
+    await bot.remove_webhook()
+    await asyncio.sleep(1)
+    await bot.set_webhook(url=WEBHOOK_URL)
+    logging.info(f"[Arranque] Webhook registrado: {WEBHOOK_URL}")
 
-```
-# Precalentar cache
-logging.info("[Arranque] Precalentando cache de partidos FINISHED...")
-await obtener_partidos_finished()
-logging.info("[Arranque] ✅ Cache lista.")
+    # Precalentar cache
+    logging.info("[Arranque] Precalentando cache de partidos FINISHED...")
+    await obtener_partidos_finished()
+    logging.info("[Arranque] ✅ Cache lista.")
 
-# Servidor web aiohttp
-app = web.Application()
-app.router.add_post(WEBHOOK_PATH, handle_webhook)
-app.router.add_get("/", handle_health)
+    # Servidor web aiohttp
+    app = web.Application()
+    app.router.add_post(WEBHOOK_PATH, handle_webhook)
+    app.router.add_get("/", handle_health)
 
-runner = web.AppRunner(app)
-await runner.setup()
-site = web.TCPSite(runner, "0.0.0.0", PORT)
-await site.start()
-logging.info(f"[Arranque] Servidor escuchando en puerto {PORT}")
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    logging.info(f"[Arranque] Servidor escuchando en puerto {PORT}")
 
-# Mantener vivo indefinidamente
-await asyncio.Event().wait()
-```
+    # Mantener vivo indefinidamente
+    await asyncio.Event().wait()
 
-if **name** == “**main**”:
-asyncio.run(main())
+
+if __name__ == "__main__":
+    asyncio.run(main())
