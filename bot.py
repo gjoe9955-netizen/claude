@@ -28,6 +28,7 @@ GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 SERPER_KEY = os.getenv('SERPER_API_KEY')
 JINA_KEY = os.getenv('JINA_API_KEY')
 
+TU_CHAT_ID = int(os.getenv("CHAT_ID", "0"))  # Agrega CHAT_ID en Railway
 OFFSET_JUAREZ = -6
 URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
 REPO_OWNER = "gjoe9955-netizen"
@@ -798,6 +799,8 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
 # ============================================================
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     if not SISTEMA_IA["estratega"]["nodo"]:
         await bot.reply_to(message, "🚨 Configura los nodos con `/config`."); return
 
@@ -1283,6 +1286,8 @@ INSTRUCCIONES PARA TU ANÁLISIS:
 
 @bot.message_handler(commands=['stats'])
 async def cmd_stats(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
         r = await asyncio.to_thread(requests.get, url, timeout=10)
@@ -1359,6 +1364,8 @@ async def cmd_stats(message):
 
 @bot.message_handler(commands=['historial'])
 async def cmd_historial(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     url = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
         r = await asyncio.to_thread(requests.get, url, timeout=10)
@@ -1374,6 +1381,8 @@ async def cmd_historial(message):
 
 @bot.message_handler(commands=['validar'])
 async def cmd_validar(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     msg_espera = await bot.reply_to(message, "🔍 Sincronizando resultados...")
     url_h = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
     try:
@@ -1422,6 +1431,8 @@ async def cmd_validar(message):
 
 @bot.message_handler(commands=['partidos'])
 async def cmd_partidos(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     from collections import defaultdict
     data = await api_football_call("matches?status=SCHEDULED")
     if not data: return
@@ -1457,6 +1468,8 @@ async def cmd_partidos(message):
 
 @bot.message_handler(commands=['tabla'])
 async def cmd_tabla(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     data = await api_football_call("standings")
     if not data: return
     txt = "🏆 <b>POSICIONES:</b>\n\n"
@@ -1466,6 +1479,8 @@ async def cmd_tabla(message):
 
 @bot.message_handler(commands=['equipos'])
 async def cmd_equipos(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
     res = r.json()
     liga = next(iter(res))
@@ -1474,6 +1489,8 @@ async def cmd_equipos(message):
 
 @bot.message_handler(commands=['config'])
 async def cmd_config(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     markup = InlineKeyboardMarkup().add(InlineKeyboardButton("🧠 ASIGNAR ESTRATEGA", callback_data="set_rol_estratega"))
     await bot.reply_to(message, "🛠 <b>CONFIGURACIÓN DE RED</b>", reply_markup=markup, parse_mode='HTML')
 
@@ -1514,6 +1531,8 @@ async def cb_fin(call):
 
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
+    if TU_CHAT_ID and message.chat.id != TU_CHAT_ID:
+        return
     help_text = (
         "🤖 <b>SISTEMA V11.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
