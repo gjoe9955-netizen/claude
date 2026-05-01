@@ -23,7 +23,13 @@ SAMBA_KEY = os.getenv('SAMBA_KEY')
 FOOTBALL_DATA_KEY = os.getenv('FOOTBALL_DATA_API_KEY')
 ODDS_API_KEY = os.getenv('API_KEY_ODDS')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-SERPER_KEY = os.getenv('SERPER_API_KEY') 
+SERPER_KEY = os.getenv('SERPER_API_KEY')
+API_SPORTS_KEY = os.getenv('API_SPORTS_KEY')
+
+# --- Cache mapeo nombre → id de api-sports (se construye al arrancar) ---
+_APISPORTS_ID_MAP = {}  # {"Girona FC": 547, ...}
+LALIGA_ID = 140
+LALIGA_SEASON = 2025
 
 OFFSET_JUAREZ = -6
 URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
@@ -339,8 +345,121 @@ async def api_football_call(endpoint):
         return r.json() if r.status_code == 200 else None
     except: return None
 
-# --- H2H filtrado por sede ---
-async def obtener_h2h_directo(id_l, id_v):
+# --- Mapeo de IDs: football-data → api-sports (se ejecuta al arrancar) ---
+async def construir_mapa_ids_apisports():
+    """
+    Descarga todos los equipos de LaLiga desde api-sports y construye
+    un dict {nombre_normalizado: id_apisports} en memoria.
+    Se llama una sola vez al arrancar el bot.
+    """
+    if not API_SPORTS_KEY:
+        logging.warning("[API-Sports] API_SPORTS_KEY no configurada, H2H desactivado.")
+        return
+
+    url = "https://v3.football.api-sports.io/teams"
+    headers = {"x-apisports-key": API_SPORTS_KEY}
+    params = {"league": LALIGA_ID, "season": LALIGA_SEASON}
+
+    try:
+        r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10)
+        if r.status_code != 200:
+            logging.error(f"[API-Sports] Error al obtener equipos: {r.status_code}")
+            return
+
+        equipos = r.json().get("response", [])
+        for item in equipos:
+            nombre = item["team"]["name"]
+            id_as = item["team"]["id"]
+            _APISPORTS_ID_MAP[nombre.lower()] = id_as
+
+        logging.info(f"[API-Sports] Mapa de IDs construido: {len(_APISPORTS_ID_MAP)} equipos.")
+
+    except Exception as e:
+        logging.error(f"[API-Sports] Error construyendo mapa: {e}")
+
+
+def resolver_id_apisports(nombre_equipo: str) -> int | None:
+    """
+    Busca el id de api-sports para un equipo dado su nombre.
+    Intenta match exacto primero, luego parcial.
+    """
+    nombre_lower = nombre_equipo.lower()
+    # Match exacto
+    if nombre_lower in _APISPORTS_ID_MAP:
+        return _APISPORTS_ID_MAP[nombre_lower]
+    # Match parcial
+    for key, id_as in _APISPORTS_ID_MAP.items():
+        if nombre_lower in key or key in nombre_lower:
+            return id_as
+    return None
+
+
+# --- H2H con api-sports (sede-corregido) ---
+async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
+    """
+    Obtiene H2H desde api-sports filtrando solo partidos jugados
+    en casa del equipo local actual. Devuelve misma firma que
+    obtener_h2h_directo para compatibilidad total.
+    """
+    if not API_SPORTS_KEY:
+        return "H2H: Sin API-Sports key.", False, 0, 0, 0
+
+    id_l = resolver_id_apisports(nombre_local)
+    id_v = resolver_id_apisports(nombre_visita)
+
+    if not id_l or not id_v:
+        logging.warning(f"[H2H] IDs no encontrados: {nombre_local}={id_l}, {nombre_visita}={id_v}")
+        return "H2H: Equipos no encontrados en api-sports.", False, 0, 0, 0
+
+    url = "https://v3.football.api-sports.io/fixtures/headtohead"
+    headers = {"x-apisports-key": API_SPORTS_KEY}
+    params = {"h2h": f"{id_l}-{id_v}", "last": 20}  # últimos 20 para tener suficientes en casa
+
+    try:
+        r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10)
+        if r.status_code != 200:
+            return "H2H: Error API-Sports.", False, 0, 0, 0
+
+        partidos = r.json().get("response", [])
+        if not partidos:
+            return "H2H: Sin partidos registrados.", False, 0, 0, 0
+
+        # Filtrar solo partidos donde id_l fue local (sede correcta)
+        partidos_en_casa = [
+            p for p in partidos
+            if p["teams"]["home"]["id"] == id_l
+        ][:10]  # últimos 10 en casa del local
+
+        if not partidos_en_casa:
+            return "H2H: Sin partidos en esta sede.", False, 0, 0, 0
+
+        l, v, e = 0, 0, 0
+        for p in partidos_en_casa:
+            goles_h = p["goals"]["home"]
+            goles_a = p["goals"]["away"]
+            if goles_h is None or goles_a is None:
+                continue
+            if goles_h > goles_a:
+                l += 1
+            elif goles_a > goles_h:
+                v += 1
+            else:
+                e += 1
+
+        total = l + v + e
+        if total == 0:
+            return "H2H: Sin resultados válidos.", False, 0, 0, 0
+
+        texto = f"H2H (en casa · {total} partidos)"
+        logging.info(f"[H2H] {nombre_local} vs {nombre_visita}: L={l} V={v} E={e} (sede correcta)")
+        return texto, True, l, v, total
+
+    except Exception as e:
+        logging.error(f"[H2H] Error api-sports: {e}")
+        return "H2H: Error de conexión.", False, 0, 0, 0
+
+
+
     if not id_l or not id_v:
         return "H2H: Sin IDs válidos.", False, 0, 0, 0
     
@@ -725,7 +844,7 @@ async def handle_pronostico(message):
         obtener_datos_mercado(l_q),
         obtener_contexto_real(l_q, v_q),
         obtener_factor_calibracion(),
-        obtener_h2h_directo(id_l, id_v),
+        obtener_h2h_apisports(m_l, m_v),
         obtener_forma_reciente(id_l),
         obtener_forma_reciente(id_v),
         obtener_posiciones_tabla()
@@ -1409,6 +1528,7 @@ async def cmd_help(message):
 
 async def main(): 
     await bot.delete_webhook(drop_pending_updates=True)
+    await construir_mapa_ids_apisports()
     await bot.polling(non_stop=True)
 
 if __name__ == "__main__": 
