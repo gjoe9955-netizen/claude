@@ -206,9 +206,9 @@ async def obtener_datos_mercado(equipo_l):
     """
     Promedia cuotas de múltiples casas de apuestas (consenso de mercado).
     Prioriza casas con menor margen (más eficientes): Pinnacle primero, luego resto.
-    Devuelve (cuota_local, cuota_empate, cuota_visita, check_odds).
+    Devuelve (cuota_local, cuota_empate, cuota_visita, check_odds, casas_usadas, rango_l, rango_v).
     """
-    if not ODDS_API_KEY: return 1.85, 3.50, 4.00, False
+    if not ODDS_API_KEY: return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
     CASAS_PREFERIDAS = {
         "pinnacle", "betfair", "bet365", "williamhill",
@@ -221,7 +221,7 @@ async def obtener_datos_mercado(equipo_l):
         params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'h2h'}
         r = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
         if r.status_code != 200:
-            return 1.85, 3.50, 4.00, False
+            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
         for match in r.json():
             home = match['home_team'].lower()
@@ -252,23 +252,28 @@ async def obtener_datos_mercado(equipo_l):
                     continue
 
             if not ol_list:
-                return 1.85, 3.50, 4.00, False
+                return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
             ol_consenso = round(sum(ol_list) / len(ol_list), 3)
             oe_consenso = round(sum(oe_list) / len(oe_list), 3)
             ov_consenso = round(sum(ov_list) / len(ov_list), 3)
 
+            rango_l = (round(min(ol_list), 3), round(max(ol_list), 3))
+            rango_v = (round(min(ov_list), 3), round(max(ov_list), 3))
+            rango_e = (round(min(oe_list), 3), round(max(oe_list), 3))
+
             logging.info(
                 f"[Odds] Consenso de {len(casas_usadas)} casas: "
                 f"L={ol_consenso} E={oe_consenso} V={ov_consenso} "
+                f"| Rango L={rango_l} V={rango_v} "
                 f"| Casas: {casas_usadas}"
             )
-            return ol_consenso, oe_consenso, ov_consenso, True
+            return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
 
     except Exception as e:
         logging.error(f"Error obtener_datos_mercado: {e}")
 
-    return 1.85, 3.50, 4.00, False
+    return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
 # --- Over/Under como señal de confirmación ---
 async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
@@ -774,7 +779,7 @@ async def handle_pronostico(message):
     # Todas las consultas externas EN PARALELO
     # H2H ahora usa football-data.org (misma fuente, sin api-sports)
     (
-        (c_l, c_e, c_v, check_odds),
+        (c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v),
         (contexto_noticias, penalty_local, penalty_visita),
         factor_calibracion,
         (h2h, check_h2h, home_wins, away_wins, total_h2h),
@@ -1057,6 +1062,8 @@ async def handle_pronostico(message):
         f"Mercado  Simple {prob_market_simple*100:.1f}%  Shin {shin_l*100:.1f}%\n"
         f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
         f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
+        f"Rango L  [{rango_l[0]}–{rango_l[1]}]  Rango V [{rango_v[0]}–{rango_v[1]}]\n"
+        f"Casas    {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
         f"Calib    ×{calib_txt}  {ou_texto[:28]}\n"
         f"Empate   {empate_aviso[:38]}"
         f"</code>\n"
@@ -1095,6 +1102,9 @@ PARTIDO: {m_l} vs {m_v}
 • Cuota empate: {c_e} → prob. implícita bruta: {(1/c_e)*100:.1f}%
 • Cuota visitante: {c_v} → prob. implícita bruta: {(1/c_v)*100:.1f}%
 • Overround (margen casa): {overround:.4f} ({(overround-1)*100:.2f}% de margen)
+• Casas usadas ({len(casas_usadas)}): {', '.join(casas_usadas) if casas_usadas else 'valores default'}
+• Rango cuota local: {rango_l[0]} – {rango_l[1]} ({'mercado dividido' if rango_l[1]-rango_l[0] > 0.10 else 'mercado consensuado'})
+• Rango cuota visitante: {rango_v[0]} – {rango_v[1]} ({'mercado dividido' if rango_v[1]-rango_v[0] > 0.10 else 'mercado consensuado'})
 
 ── MÉTODO SHIN (1993) vs NORMALIZACIÓN SIMPLE ──
 • Prob. local normalización simple: {prob_market_simple*100:.1f}%
