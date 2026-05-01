@@ -1,1 +1,15 @@
-[]
+[
+    {
+        "fecha": "2026-05-01 11:30",
+        "partido": "Girona FC vs RCD Mallorca",
+        "pick": "No Bet",
+        "poisson": "46.8%",
+        "cuota": 2.052,
+        "edge": "0.0%",
+        "stake": "0%",
+        "nivel": "NO BET 🚫",
+        "pick_riesgo": "Sin valor alternativo",
+        "stake_riesgo": "0%",
+        "status": "⏳ PENDIENTE"
+    }
+]
