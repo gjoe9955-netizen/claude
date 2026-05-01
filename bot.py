@@ -80,7 +80,7 @@ async def fetch_jina(url: str) -> str:
             "Accept": "text/plain",
             "X-Return-Format": "text"
         }
-        r = await asyncio.to_thread(requests.get, jina_url, headers=headers, timeout=12)
+        r = await asyncio.to_thread(requests.get, jina_url, headers=headers, timeout=30)
         if r.status_code == 200:
             return r.text[:3000]
     except Exception as e:
@@ -111,7 +111,7 @@ async def obtener_contexto_real(l_q, v_q):
     }
 
     try:
-        r = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=10)
+        r = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=15)
         res = r.json().get('organic', [])
 
         if not res:
@@ -316,7 +316,7 @@ async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
     try:
         url = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'totals'}
-        r = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
+        r = await asyncio.to_thread(requests.get, url, params=params, timeout=15)
         if r.status_code == 200:
             for match in r.json():
                 home = match['home_team'].lower()
@@ -369,7 +369,7 @@ async def obtener_factor_calibracion():
 async def api_football_call(endpoint):
     headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
     try:
-        r = await asyncio.to_thread(requests.get, f"https://api.football-data.org/v4/competitions/PD/{endpoint}", headers=headers, timeout=10)
+        r = await asyncio.to_thread(requests.get, f"https://api.football-data.org/v4/competitions/PD/{endpoint}", headers=headers, timeout=20)
         return r.json() if r.status_code == 200 else None
     except: return None
 
