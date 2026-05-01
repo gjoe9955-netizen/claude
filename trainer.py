@@ -5,6 +5,7 @@ import requests
 import json
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 from datetime import datetime
 from understat import Understat
 
@@ -163,6 +164,61 @@ def normalizar_nombre(nombre_fd: str) -> str:
 
 
 # ===========================================================================
+# H2H — construye sección con últimos enfrentamientos + xG por par de equipos
+# ===========================================================================
+
+def construir_h2h(matches_raw: list, xg_understat: dict) -> dict:
+    """
+    Construye sección h2h: por cada par (id_local, id_visita),
+    guarda los últimos 6 enfrentamientos con goles reales y xG si disponible.
+    La clave en el JSON es "{id_local}_{id_visita}" (sede exacta).
+    """
+    pares = defaultdict(list)
+
+    for m in matches_raw:
+        if not (m.get('score') and m['score'].get('fullTime')):
+            continue
+        winner = m['score'].get('winner')
+        if not winner:
+            continue
+
+        h_id    = m['homeTeam']['id']
+        a_id    = m['awayTeam']['id']
+        h_name  = m['homeTeam']['name']
+        a_name  = m['awayTeam']['name']
+        goles_h = m['score']['fullTime']['home']
+        goles_a = m['score']['fullTime']['away']
+        fecha   = m['utcDate'][:10]
+
+        # xG si existe en Understat
+        h_us = normalizar_nombre(h_name)
+        a_us = normalizar_nombre(a_name)
+        xg_data = xg_understat.get((fecha, h_us, a_us)) or xg_understat.get(('', h_us, a_us))
+        xg_h = round(xg_data[0], 2) if xg_data else None
+        xg_a = round(xg_data[1], 2) if xg_data else None
+
+        pares[(h_id, a_id)].append({
+            "fecha":   fecha,
+            "goles_h": goles_h,
+            "goles_a": goles_a,
+            "xg_h":    xg_h,
+            "xg_a":    xg_a,
+            "winner":  winner   # "HOME_TEAM" | "AWAY_TEAM" | "DRAW"
+        })
+
+    h2h_out = {}
+    for (h_id, a_id), partidos in pares.items():
+        partidos_ord = sorted(partidos, key=lambda p: p["fecha"], reverse=True)[:6]
+        temporadas_con_xg = sum(1 for p in partidos_ord if p["xg_h"] is not None)
+        h2h_out[f"{h_id}_{a_id}"] = {
+            "partidos":          partidos_ord,
+            "temporadas_con_xg": temporadas_con_xg
+        }
+
+    return h2h_out
+
+
+# ===========================================================================
 # ENTRENAMIENTO PRINCIPAL
 # ===========================================================================
 
@@ -273,18 +329,25 @@ def train_spain():
                 "def_a": float(def_a)
             }
 
+        # Construir sección H2H con datos Understat
+        print("Construyendo sección H2H...")
+        h2h_data = construir_h2h(matches, xg_understat)
+        print(f"   ✅ H2H: {len(h2h_data)} pares de equipos registrados.")
+
         output = {
             "LaLiga": {
                 "averages": {"league_home": float(avg_h), "league_away": float(avg_a)},
-                "teams": teams_stats
+                "teams": teams_stats,
+                "h2h": h2h_data
             },
             "last_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "meta": {
-                "partidos_con_xg": partidos_con_xg,
-                "partidos_sin_xg": partidos_sin_xg,
-                "partidos_sin_understat": partidos_sin_understat,
-                "xg_weight": XG_WEIGHT,
-                "time_decay_lambda": TIME_DECAY_LAMBDA
+                "partidos_con_xg":        partidos_con_xg,
+                "partidos_sin_xg":        partidos_sin_xg,
+                "partidos_sin_understat":  partidos_sin_understat,
+                "xg_weight":              XG_WEIGHT,
+                "time_decay_lambda":      TIME_DECAY_LAMBDA,
+                "pares_h2h":              len(h2h_data)
             }
         }
 
@@ -296,6 +359,7 @@ def train_spain():
         print(f"   Con xG:          {partidos_con_xg}")
         print(f"   Sin xG (mapeo):  {partidos_sin_xg}")
         print(f"   Sin Understat:   {partidos_sin_understat} (Levante/Oviedo — normal)")
+        print(f"   Pares H2H:       {len(h2h_data)}")
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
