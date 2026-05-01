@@ -1696,9 +1696,21 @@ async def handle_live(message):
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2 or " vs " not in parts[1]:
-        await bot.reply_to(message, "⚠️ `/live Local vs Visitante`"); return
+        await bot.reply_to(message, "⚠️ `/live Local vs Visitante` o `/live Local vs Visitante 67`"); return
 
-    l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
+    resto = parts[1].strip()
+
+    # Detectar si viene minuto al final: "Girona vs Mallorca 67"
+    minuto_usuario = None
+    tokens = resto.rsplit(maxsplit=1)
+    if len(tokens) == 2 and tokens[1].isdigit():
+        minuto_usuario = int(tokens[1])
+        resto = tokens[0]
+
+    if " vs " not in resto:
+        await bot.reply_to(message, "⚠️ `/live Local vs Visitante` o `/live Local vs Visitante 67`"); return
+
+    l_q, v_q = [t.strip() for t in resto.split(" vs ", 1)]
     msg_espera = await bot.reply_to(message, "📡 Buscando partido en curso...")
 
     # 1. Buscar partido IN_PLAY
@@ -1709,23 +1721,70 @@ async def handle_live(message):
             message.chat.id, msg_espera.message_id
         ); return
 
-    minuto      = partido.get("minute") or partido.get("currentPeriod", {}) and 45
-    goles_local   = partido["score"]["fullTime"]["home"] or 0
-    goles_visita  = partido["score"]["fullTime"]["away"] or 0
+    goles_local  = partido["score"]["fullTime"]["home"] or 0
+    goles_visita = partido["score"]["fullTime"]["away"] or 0
     m_l = partido["homeTeam"]["name"]
     m_v = partido["awayTeam"]["name"]
 
-    # Intentar obtener minuto real
-    try:
-        minuto = int(partido.get("minute", 45))
-    except:
-        minuto = 45
+    # Determinar minuto: usuario > API > botones
+    if minuto_usuario is not None:
+        minuto = max(1, min(minuto_usuario, 89))
+        minuto_fuente = f"min {minuto} (ingresado)"
+    else:
+        try:
+            minuto_api = int(partido.get("minute", 0))
+            if minuto_api > 0:
+                minuto = minuto_api
+                minuto_fuente = f"min {minuto} (API)"
+            else:
+                raise ValueError("sin minuto")
+        except:
+            # Pedir minuto con botones
+            await bot.edit_message_text(
+                f"📡 Partido: <b>{html.escape(m_l)} {goles_local}-{goles_visita} {html.escape(m_v)}</b>\n"
+                f"⚠️ La API no devolvió el minuto. ¿En qué minuto van?",
+                message.chat.id, msg_espera.message_id, parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup().row(
+                    InlineKeyboardButton("Min 15", callback_data=f"live_min_{l_q}|{v_q}|15"),
+                    InlineKeyboardButton("Min 30", callback_data=f"live_min_{l_q}|{v_q}|30"),
+                    InlineKeyboardButton("Min 45", callback_data=f"live_min_{l_q}|{v_q}|45"),
+                ).row(
+                    InlineKeyboardButton("Min 60", callback_data=f"live_min_{l_q}|{v_q}|60"),
+                    InlineKeyboardButton("Min 75", callback_data=f"live_min_{l_q}|{v_q}|75"),
+                    InlineKeyboardButton("Min 85", callback_data=f"live_min_{l_q}|{v_q}|85"),
+                )
+            )
+            return
+
+    await _ejecutar_live(message.chat.id, msg_espera.message_id, l_q, v_q, m_l, m_v, goles_local, goles_visita, minuto, minuto_fuente)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('live_min_'))
+async def cb_live_minuto(call):
+    _, _, datos = call.data.partition('live_min_')
+    partes = datos.split('|')
+    if len(partes) != 3:
+        return
+    l_q, v_q, minuto_str = partes
+    minuto = int(minuto_str)
+
+    partido = await obtener_partido_inplay(l_q, v_q)
+    if not partido:
+        await bot.edit_message_text("❌ Partido no encontrado.", call.message.chat.id, call.message.message_id); return
+
+    goles_local  = partido["score"]["fullTime"]["home"] or 0
+    goles_visita = partido["score"]["fullTime"]["away"] or 0
+    m_l = partido["homeTeam"]["name"]
+    m_v = partido["awayTeam"]["name"]
 
     await bot.edit_message_text(
-        f"📡 Partido encontrado: {m_l} {goles_local}-{goles_visita} {m_v} (min ~{minuto})\n⚙️ Calculando análisis live...",
-        message.chat.id, msg_espera.message_id
+        f"⚙️ Calculando análisis live para min {minuto}...",
+        call.message.chat.id, call.message.message_id
     )
+    await _ejecutar_live(call.message.chat.id, call.message.message_id, l_q, v_q, m_l, m_v, goles_local, goles_visita, minuto, f"min {minuto} (seleccionado)")
 
+
+async def _ejecutar_live(chat_id: int, msg_id: int, l_q: str, v_q: str, m_l: str, m_v: str, goles_local: int, goles_visita: int, minuto: int, minuto_fuente: str):
     # 2. Cargar modelo Poisson base
     full_data, _ = await obtener_modelo()
     if not full_data:
@@ -1789,7 +1848,7 @@ async def handle_live(message):
     prompt_live = f"""
 Eres analista de fútbol in-play. Analiza el partido EN CURSO con los datos ajustados al minuto actual.
 
-PARTIDO EN CURSO: {m_l} {goles_local}-{goles_visita} {m_v} | Minuto ~{minuto}
+PARTIDO EN CURSO: {m_l} {goles_local}-{goles_visita} {m_v} | {minuto_fuente}
 Minutos restantes: {90 - minuto}
 
 ── POISSON LIVE (ajustado a minutos restantes y marcador) ──
@@ -1825,11 +1884,10 @@ Sé directo y técnico. {'AVISO: cuotas con delay ' + str(delay_min) + ' min, pu
     analisis_live_raw = await ejecutar_ia("estratega", prompt_live)
     analisis_live = html.escape(_re.sub(r'<[^>]+>', '', analisis_live_raw or ""))
 
-    # 8. Construir mensaje
     header_live = (
         f"<b>⚡ ANÁLISIS LIVE</b>\n"
         f"<b>{html.escape(m_l)} {goles_local} - {goles_visita} {html.escape(m_v)}</b>\n"
-        f"<i>Minuto ~{minuto} | {90-minuto} min restantes</i>\n\n"
+        f"<i>{html.escape(minuto_fuente)} | {90-minuto} min restantes</i>\n\n"
         f"<b>╔{'═'*22}╗</b>\n"
         f"<b>║  {nivel_live:<22}║</b>\n"
         f"<b>║  {html.escape(pick_txt):<22}║</b>\n"
@@ -1845,7 +1903,7 @@ Sé directo y técnico. {'AVISO: cuotas con delay ' + str(delay_min) + ' min, pu
     )
 
     final_live = header_live + analisis_live + f"\n\n<i>{'—'*18}\nV11-Live · 🛰 <code>{SISTEMA_IA['estratega']['api']}</code></i>"
-    await bot.edit_message_text(final_live, message.chat.id, msg_espera.message_id, parse_mode='HTML')
+    await bot.edit_message_text(final_live, chat_id, msg_id, parse_mode='HTML')
 
 
 @bot.message_handler(commands=['help'])
