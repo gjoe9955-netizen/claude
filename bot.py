@@ -1160,13 +1160,13 @@ async def handle_pronostico(message):
         f"λH {lh:.2f}  λA {la:.2f}\n"
         f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
         f"Mercado  Simple 🏠{prob_simple_l*100:.1f}% 🤝{prob_simple_e*100:.1f}% 🚩{prob_simple_v*100:.1f}%\n"
-        f"Shin z   {shin_z:.4f}  {shin_confianza[:22]}\n"
+        f"Shin z   {shin_z:.4f}  {html.escape(shin_confianza[:22])}\n"
         f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
-        f"Rango L  [{rango_l[0]}–{rango_l[1]}]  Rango V [{rango_v[0]}–{rango_v[1]}]\n"
-        f"Casas    {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
-        f"Calib    ×{calib_txt}  {ou_texto[:28]}\n"
-        f"Empate   {empate_aviso[:38]}\n"
-        f"Margen   {margen_error*100:.3f}%{zona_gris_txt}"
+        f"Rango L  [{rango_l[0]}-{rango_l[1]}]  Rango V [{rango_v[0]}-{rango_v[1]}]\n"
+        f"Casas    {html.escape(', '.join(casas_usadas) if casas_usadas else 'default')}\n"
+        f"Calib    x{html.escape(calib_txt)}  {html.escape(ou_texto[:28])}\n"
+        f"Empate   {html.escape(empate_aviso[:38])}\n"
+        f"Margen   {margen_error*100:.3f}%{html.escape(zona_gris_txt)}"
         f"</code>\n"
     )
 
@@ -1177,13 +1177,13 @@ async def handle_pronostico(message):
 
     context_block = (
         f"\n<b>◆ CONTEXTO</b>\n"
-        f"<b>H2H</b> {h2h_texto} → {h2h_ajuste_txt}\n"
-        f"<b>🏠</b> {forma_local_txt}\n"
-        f"<b>🚩</b> {forma_visita_txt}\n"
-        f"<b>🏆</b> {tabla_texto}\n"
-        f"<b>⚡</b> {elo_texto} <i>({elo_src_txt})</i>\n"
-        f"<b>📰</b>{serper_txt}\n"
-        f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {h2h_indicador}</b>\n"
+        f"<b>H2H</b> {html.escape(h2h_texto)} → {html.escape(h2h_ajuste_txt)}\n"
+        f"<b>🏠</b> {html.escape(forma_local_txt)}\n"
+        f"<b>🚩</b> {html.escape(forma_visita_txt)}\n"
+        f"<b>🏆</b> {html.escape(tabla_texto)}\n"
+        f"<b>⚡</b> {html.escape(elo_texto)} <i>({html.escape(elo_src_txt)})</i>\n"
+        f"<b>📰</b>{html.escape(serper_txt)}\n"
+        f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {html.escape(h2h_indicador)}</b>\n"
     )
 
     header = decision_block + signals_block + context_block
