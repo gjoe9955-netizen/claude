@@ -457,13 +457,21 @@ def obtener_h2h_json(id_local: int, id_visita: int, full_data: dict) -> tuple:
     return texto, True, home_wins, away_wins, total, fuente_label
 
 
+# ============================================================
+# CAMBIO 1: H2H — reducir MAX_AJUSTE de 0.08 a 0.04
+# + ignorar H2H si hay menos de 5 partidos (evita ruido)
+# ============================================================
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
     if total_partidos < 1:
         return 1.0, 1.0, "H2H: Sin datos"
 
+    # Si hay menos de 5 partidos, el H2H es demasiado ruidoso
+    if total_partidos < 5:
+        return 1.0, 1.0, f"H2H ⚖️ Muestra insuficiente ({total_partidos}p < 5)"
+
     tasa_local  = home_wins / total_partidos
     tasa_visita = away_wins / total_partidos
-    MAX_AJUSTE  = 0.08
+    MAX_AJUSTE  = 0.04  # ← CAMBIADO: era 0.08 (reduce el peso del H2H)
 
     if tasa_local > 0.60:
         intensidad = min((tasa_local - 0.60) / 0.40, 1.0)
@@ -795,6 +803,24 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
 
 
 # ============================================================
+# CAMBIO 2: Helper para calcular marcadores más probables (Poisson)
+# Usado en NO BET para generar pick de riesgo estadístico real
+# ============================================================
+def calcular_marcadores_probables(lh: float, la: float, top_n: int = 3) -> list:
+    """
+    Devuelve los top_n marcadores más probables según Poisson + Dixon-Coles.
+    Cada elemento es ((goles_local, goles_visita), probabilidad).
+    """
+    resultados = []
+    for x in range(6):
+        for y in range(6):
+            p = poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
+            resultados.append(((x, y), p))
+    resultados.sort(key=lambda r: r[1], reverse=True)
+    return resultados[:top_n]
+
+
+# ============================================================
 # Comando Principal: Pronóstico V11
 # ============================================================
 @bot.message_handler(commands=['pronostico', 'valor'])
@@ -873,9 +899,15 @@ async def handle_pronostico(message):
     if elos and id_l in elos and id_v in elos:
         factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
 
-    # --- PASO 5: Combinar todos los factores ---
-    lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
-    la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
+    # ============================================================
+    # CAMBIO 3: Suavizado de lambdas (era multiplicación directa)
+    # Reduce overfitting cuando los factores se acumulan
+    # ============================================================
+    factor_total_lh = factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
+    factor_total_la = factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
+
+    lh = lh_base * (1 + (factor_total_lh - 1) * 0.7)
+    la = la_base * (1 + (factor_total_la - 1) * 0.7)
 
     # --- PASO 6: Probabilidad Poisson 7x7 + Dixon-Coles ---
     prob_poisson = 0
@@ -928,7 +960,11 @@ async def handle_pronostico(message):
 
     p_win = prob_poisson_calibrado_local
 
-    margen_error = 0.005
+    # ============================================================
+    # CAMBIO 4: Margen de error dinámico según Shin z
+    # A mayor incertidumbre (z alto), mayor margen requerido
+    # ============================================================
+    margen_error = 0.003 + (shin_z * 0.02)  # ← CAMBIADO: era 0.005 fijo
 
     edge_local_raw  = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
     edge_empate     = (prob_poisson_empate_cal - prob_market_e - margen_error) * shin_factor
@@ -966,7 +1002,20 @@ async def handle_pronostico(message):
     prob_riesgo        = 0
     pick_riesgo_cuota  = 0
 
-    if candidatos:
+    # ============================================================
+    # CAMBIO 5: Detector de "zona gris" — mercado muy eficiente
+    # Si modelo y mercado están alineados en los 3 resultados,
+    # forzar NO BET independientemente del edge calculado
+    # ============================================================
+    zona_gris = (
+        abs(prob_poisson_calibrado_local - prob_market_l) < 0.03 and
+        abs(prob_poisson_empate_cal - prob_market_e) < 0.03 and
+        abs(prob_poisson_visita_cal - prob_market_v) < 0.03
+    )
+    if zona_gris:
+        logging.info("[ZonaGris] Mercado eficiente detectado — forzando NO BET")
+
+    if candidatos and not zona_gris:
         candidatos.sort(key=lambda c: c[1], reverse=True)
         tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
 
@@ -988,6 +1037,7 @@ async def handle_pronostico(message):
         else:
             nivel = "DIAMANTE 💎"
 
+        # Pick de riesgo: segundo candidato si existe, sino nada
         if len(candidatos) > 1:
             _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
             kelly_riesgo  = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
@@ -1006,6 +1056,20 @@ async def handle_pronostico(message):
         prob_pick_pct = 0
         edge_principal = 0
         nombre_pick   = "No Bet"
+
+        # ============================================================
+        # CAMBIO 5b: Pick de riesgo en NO BET basado en Poisson real
+        # (no en edge — el edge es negativo en NO BET)
+        # ============================================================
+        top_scores = calcular_marcadores_probables(lh, la, top_n=3)
+        if top_scores:
+            marcador_top = top_scores[0][0]
+            prob_riesgo = top_scores[0][1] * 100
+            pick_riesgo_nombre = f"{marcador_top[0]}-{marcador_top[1]}"
+            pick_riesgo_cuota  = 0   # marcador exacto, sin cuota directa del modelo
+            stake_riesgo       = 0.25  # stake mínimo fijo para picks de riesgo
+            nivel_riesgo       = "RIESGO ALTO 🔴"
+            logging.info(f"[RiesgoPoisson] Pick de riesgo en NO BET: {pick_riesgo_nombre} ({prob_riesgo:.1f}%)")
 
     # --- Guardado en Historial ---
     fecha_hoy = (datetime.now(timezone.utc) + timedelta(hours=OFFSET_JUAREZ)).strftime('%Y-%m-%d %H:%M')
@@ -1072,6 +1136,7 @@ async def handle_pronostico(message):
     if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
     if not serper_txt: serper_txt = " Sin bajas detectadas"
 
+    zona_gris_txt = " · 🌫 Zona gris (mercado eficiente)" if zona_gris else ""
     tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
 
     if pick_final == "No Bet":
@@ -1081,9 +1146,9 @@ async def handle_pronostico(message):
                 f"<b>║  🚫 NO BET — SIN VALOR      ║</b>\n"
                 f"<b>╠{'═'*22}╣</b>\n"
                 f"<b>║  {nivel_riesgo:<22}║</b>\n"
-                f"<b>║  🎲 {pick_riesgo_nombre:<20}║</b>\n"
-                f"<b>║  💰 Stake: {stake_riesgo}% (riesgo){' '*(8-len(str(stake_riesgo)))}║</b>\n"
-                f"<b>║  📈 Prob: {prob_riesgo:.1f}%  Edge: {edge_riesgo*100:.1f}%{' '*(6-len(f'{prob_riesgo:.1f}'))}║</b>\n"
+                f"<b>║  🎲 Marcador: {pick_riesgo_nombre:<15}║</b>\n"
+                f"<b>║  📊 Prob Poisson: {prob_riesgo:.1f}%{' '*(10-len(f'{prob_riesgo:.1f}'))}║</b>\n"
+                f"<b>║  💰 Stake: {stake_riesgo}% (solo riesgo){' '*(5-len(str(stake_riesgo)))}║</b>\n"
                 f"<b>╚{'═'*22}╝</b>\n"
             )
         else:
@@ -1121,7 +1186,8 @@ async def handle_pronostico(message):
         f"Rango L  [{rango_l[0]}–{rango_l[1]}]  Rango V [{rango_v[0]}–{rango_v[1]}]\n"
         f"Casas    {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
         f"Calib    ×{calib_txt}  {ou_texto[:28]}\n"
-        f"Empate   {empate_aviso[:38]}"
+        f"Empate   {empate_aviso[:38]}\n"
+        f"Margen   {margen_error*100:.3f}%{zona_gris_txt}"
         f"</code>\n"
     )
 
@@ -1158,6 +1224,7 @@ PARTIDO: {m_l} vs {m_v}
 • Lambda local BASE (sin ajustes): {lh_base:.2f}
 • Lambda visitante BASE (sin ajustes): {la_base:.2f}
 • Factor calibración histórica: ×{factor_calibracion:.2f} {'(modelo sobreestima)' if factor_calibracion < 1 else '(modelo subestima)' if factor_calibracion > 1 else '(sin datos aún)'}
+• Zona gris detectada: {'SÍ — modelo y mercado alineados en los 3 resultados' if zona_gris else 'No'}
 
 ── MERCADO DE CUOTAS ──
 • Cuota local: {c_l} → prob. implícita bruta: {(1/c_l)*100:.1f}%
@@ -1179,6 +1246,7 @@ PARTIDO: {m_l} vs {m_v}
 • Factor Shin aplicado al edge: ×{shin_factor:.2f}
 
 ── EDGE (modelo vs mercado, ajustado) ──
+• Margen dinámico aplicado: {margen_error*100:.3f}% (base 0.3% + Shin z×2%)
 • Edge local:     {edge_ajustado*100:.2f}%
 • Edge empate:    {edge_empate*100:.2f}%
 • Edge visitante: {edge_visita*100:.2f}%
@@ -1189,6 +1257,11 @@ PARTIDO: {m_l} vs {m_v}
 • Stake Kelly: {stake}% del bankroll
 • Señal Over/Under: {ou_texto}
 • {empate_aviso}
+
+── PICK DE RIESGO (marcador más probable Poisson) ──
+• Marcador más probable: {pick_riesgo_nombre if pick_riesgo_nombre else "N/A"}
+• Probabilidad Poisson: {prob_riesgo:.1f}%
+• Stake sugerido: {stake_riesgo}% (cap 0.25%, solo para riesgo consciente)
 
 ── HISTORIAL H2H (Understat · desde JSON) ──
 • Resultado: {h2h}
@@ -1213,23 +1286,19 @@ PARTIDO: {m_l} vs {m_v}
 •{serper_txt}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
 
-── PICK DE RIESGO ALTERNATIVO ──
-• Pick de riesgo: {pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"}
-• Cuota: {pick_riesgo_cuota if pick_riesgo_cuota else "N/A"}
-• Stake sugerido: {stake_riesgo}% (cap 1.0%, Kelly×0.25)
-
 ═══════════════════════════════════════
 RESULTADO DEL MODELO
 🎯 PICK PRINCIPAL: {pick_final}
 📈 NIVEL: {nivel}
 💰 STAKE Kelly: {stake}% del bankroll
-🎲 PICK RIESGO: {pick_riesgo_nombre if pick_riesgo_nombre else "Sin valor alternativo"}
+🎲 PICK RIESGO (Poisson): {pick_riesgo_nombre if pick_riesgo_nombre else "Sin dato"}  ({prob_riesgo:.1f}%)
 ═══════════════════════════════════════
 
 INSTRUCCIONES PARA TU ANÁLISIS:
 1. El sistema ya evaluó los tres resultados (local, empate, visitante) y eligió el de mayor edge positivo como pick principal.
    - Si el pick es "No Bet", todos los edges son negativos → no hay valor en ningún resultado.
-   - Si hay pick de riesgo, menciona brevemente por qué puede ser interesante pero aclara su mayor riesgo.
+   - Si hay zona gris detectada, menciona que el mercado está eficientemente priceado.
+   - El pick de riesgo es el marcador más probable según Poisson — aclara que no es un value bet sino el escenario estadístico más frecuente.
 2. Redacta un análisis de máximo 130 palabras que integre:
    a) Por qué el pick seleccionado tiene valor (edge modelo vs mercado).
    b) Si Shin y normalización simple coinciden o divergen, y qué implica.
@@ -1255,7 +1324,8 @@ INSTRUCCIONES PARA TU ANÁLISIS:
             f"Edge local: {edge_ajustado*100:.2f}% | Edge empate: {edge_empate*100:.2f}% | Edge visitante: {edge_visita*100:.2f}%\n"
             f"Prob. modelo: Local {p_local_pct:.1f}% | Empate {p_empate_pct:.1f}% | Visita {p_visita_pct:.1f}%\n"
             f"Prob. mercado: Local {prob_market_l*100:.1f}% | Empate {prob_market_e*100:.1f}% | Visita {prob_market_v*100:.1f}%\n"
-            f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n\n"
+            f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | Confianza: {shin_confianza}\n"
+            f"Margen dinámico: {margen_error*100:.3f}% | Zona gris: {'SÍ' if zona_gris else 'No'}\n\n"
             f"── CONTEXTO ──\n"
             f"H2H ({fuente_h2h}): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
             f"Forma local: {forma_local_txt} | Forma visita: {forma_visita_txt}\n"
