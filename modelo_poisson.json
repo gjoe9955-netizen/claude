@@ -2,157 +2,4450 @@
     "LaLiga": {
         "averages": {
             "league_home": 1.665217938444654,
-            "league_away": 1.1853828526992571
+            "league_away": 1.183072411765103
         },
         "teams": {
             "Girona FC": {
                 "id_api": 298,
                 "att_h": 0.8689115487643513,
-                "def_h": 1.2631874569656527,
-                "att_a": 0.9325948305138274,
+                "def_h": 1.2656543558461102,
+                "att_a": 0.9344161097947675,
                 "def_a": 0.9451275474408322
             },
             "Rayo Vallecano de Madrid": {
                 "id_api": 87,
                 "att_h": 1.0393877715436728,
-                "def_h": 0.8451582229616181,
-                "att_a": 0.8488541652485512,
+                "def_h": 0.8468087459006614,
+                "att_a": 0.8505119060520844,
                 "def_a": 1.1237967068986674
             },
             "Villarreal CF": {
                 "id_api": 94,
                 "att_h": 1.3029136961524597,
-                "def_h": 1.046969155338704,
-                "att_a": 1.0830673764221386,
+                "def_h": 1.0490137980581486,
+                "att_a": 1.0500235587957978,
                 "def_a": 0.8076280561675717
             },
             "Real Oviedo": {
                 "id_api": 1048,
                 "att_h": 0.40228802244835626,
-                "def_h": 0.7601455393828156,
-                "att_a": 1.10429239224673,
+                "def_h": 0.7616300396996512,
+                "att_a": 1.1064489824274741,
                 "def_a": 1.3009273785342925
             },
             "RCD Mallorca": {
                 "id_api": 89,
                 "att_h": 1.044969017936236,
-                "def_h": 1.0859171517180697,
-                "att_a": 0.6615889975553816,
+                "def_h": 1.088037856599258,
+                "att_a": 0.6628810252337698,
                 "def_a": 1.21119618780162
             },
             "FC Barcelona": {
                 "id_api": 81,
                 "att_h": 1.7072478104669948,
-                "def_h": 0.6967536615632715,
-                "att_a": 2.1383138552784624,
+                "def_h": 0.6981143628734269,
+                "att_a": 2.1424898024243633,
                 "def_a": 0.8090467921669862
             },
             "Deportivo Alavés": {
                 "id_api": 263,
                 "att_h": 0.8834804833376447,
-                "def_h": 1.0398454173869143,
-                "att_a": 1.0830023420654953,
+                "def_h": 1.041876148045183,
+                "att_a": 1.085117354568542,
                 "def_a": 1.0567851742558019
             },
             "Levante UD": {
                 "id_api": 88,
                 "att_h": 0.8064305207405335,
-                "def_h": 0.9609274038123246,
-                "att_a": 0.6638098645823975,
+                "def_h": 0.9628040142263955,
+                "att_a": 0.665106229427334,
                 "def_a": 0.92167136539945
             },
             "Valencia CF": {
                 "id_api": 95,
                 "att_h": 0.9640753568747729,
-                "def_h": 1.0126290411995407,
-                "att_a": 1.012869273130112,
+                "def_h": 1.0146066205637743,
+                "att_a": 1.0148473216471046,
                 "def_a": 0.8975114040672754
             },
             "Real Sociedad de Fútbol": {
                 "id_api": 92,
                 "att_h": 1.1772251042429684,
-                "def_h": 1.1189798124677173,
-                "att_a": 1.1421496274220537,
+                "def_h": 1.1211650859450695,
+                "att_a": 1.1443801495996333,
                 "def_a": 1.2037983776329317
             },
             "RC Celta de Vigo": {
                 "id_api": 558,
                 "att_h": 0.892468324381491,
-                "def_h": 1.3232122006683786,
-                "att_a": 1.1038821468856579,
+                "def_h": 1.3257963228257326,
+                "att_a": 1.1060379358917098,
                 "def_a": 0.806985827583817
             },
             "Getafe CF": {
                 "id_api": 82,
                 "att_h": 0.5295233028288173,
-                "def_h": 0.7955925848483951,
-                "att_a": 0.731138332036715,
+                "def_h": 0.797146310264239,
+                "att_a": 0.7325661837168556,
                 "def_a": 0.8291346860575962
             },
             "Athletic Club": {
                 "id_api": 77,
                 "att_h": 0.882154427146331,
-                "def_h": 0.9607158340199846,
-                "att_a": 0.9973198382787026,
+                "def_h": 0.9238575447189781,
+                "att_a": 0.9992675200570016,
                 "def_a": 1.102894290862031
             },
             "Sevilla FC": {
                 "id_api": 559,
                 "att_h": 0.6878989569994117,
-                "def_h": 1.2090273676141066,
-                "att_a": 0.7163839290181792,
+                "def_h": 1.2113884963944495,
+                "att_a": 0.7177829665899406,
                 "def_a": 1.2002835665458096
             },
             "RCD Espanyol de Barcelona": {
                 "id_api": 80,
                 "att_h": 0.6695864047101814,
-                "def_h": 1.1622971119519634,
-                "att_a": 0.8957309150249162,
+                "def_h": 1.164566980472603,
+                "att_a": 0.8974802021788388,
                 "def_a": 1.1526528240538743
             },
             "Club Atlético de Madrid": {
                 "id_api": 78,
                 "att_h": 1.3191819762804302,
-                "def_h": 0.912313774494023,
-                "att_a": 0.9028345538164181,
+                "def_h": 0.9140954465780156,
+                "att_a": 0.9045977137795467,
                 "def_a": 1.0267953332487816
             },
             "Elche CF": {
                 "id_api": 285,
                 "att_h": 1.0941598653255058,
-                "def_h": 1.35958052374804,
-                "att_a": 0.8971084154972072,
+                "def_h": 1.3622356701821114,
+                "att_a": 0.8988603927937164,
                 "def_a": 1.190391952234463
             },
             "Real Betis Balompié": {
                 "id_api": 90,
                 "att_h": 1.0339488054156554,
-                "def_h": 0.8897662649999541,
-                "att_a": 1.011252010955823,
+                "def_h": 0.8915039036939527,
+                "att_a": 1.0132269010957868,
                 "def_a": 0.8838960776588926
             },
             "Real Madrid CF": {
                 "id_api": 86,
                 "att_h": 1.420255953594742,
-                "def_h": 0.8461433349371015,
-                "att_a": 1.4183020796188563,
+                "def_h": 0.8477957817169935,
+                "att_a": 1.421071904313575,
                 "def_a": 0.6981089020742017
             },
             "CA Osasuna": {
                 "id_api": 79,
                 "att_h": 1.146994501473721,
-                "def_h": 0.863318875659534,
-                "att_a": 0.755117517138579,
+                "def_h": 0.8650048648261445,
+                "att_a": 0.7565921981507842,
                 "def_a": 0.877606276322949
+            }
+        },
+        "h2h": {
+            "298_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-15",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": 0.8,
+                        "xg_a": 3.25,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-15",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "89_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-16",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": 0.53,
+                        "xg_a": 2.02,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-16",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.72,
+                        "xg_a": 0.74,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-16",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.59,
+                        "xg_a": 1.05,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-17",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.74,
+                        "xg_a": 1.5,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-17",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 2.68,
+                        "xg_a": 0.9,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-17",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.42,
+                        "xg_a": 1.29,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-18",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.98,
+                        "xg_a": 1.6,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-19",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.43,
+                        "xg_a": 0.2,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-22",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 2.14,
+                        "xg_a": 1.44,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-23",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.66,
+                        "xg_a": 0.92,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-23",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.68,
+                        "xg_a": 0.31,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-23",
+                        "goles_h": 2,
+                        "goles_a": 3,
+                        "xg_h": 2.69,
+                        "xg_a": 2.48,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-24",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 0.95,
+                        "xg_a": 0.59,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-24",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.43,
+                        "xg_a": 1.87,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-24",
+                        "goles_h": 5,
+                        "goles_a": 0,
+                        "xg_h": 2.98,
+                        "xg_a": 0.14,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-24",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "77_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-25",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.69,
+                        "xg_a": 0.49,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-25",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.83,
+                        "xg_a": 1.33,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-27",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.91,
+                        "xg_a": 0.71,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-29",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.44,
+                        "xg_a": 0.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-29",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 1.54,
+                        "xg_a": 0.76,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-30",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.86,
+                        "xg_a": 0.96,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-30",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "298_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-30",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 2.01,
+                        "xg_a": 1.62,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-30",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.84,
+                        "xg_a": 0.55,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-31",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.88,
+                        "xg_a": 0.97,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-31",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.72,
+                        "xg_a": 1.11,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-31",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.37,
+                        "xg_a": 1.38,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-08-31",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.87,
+                        "xg_a": 2.36,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-12",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 0.35,
+                        "xg_a": 0.78,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-13",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "92_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-13",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 3.15,
+                        "xg_a": 2.54,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-13",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.87,
+                        "xg_a": 0.09,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-13",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.51,
+                        "xg_a": 0.67,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-14",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.8,
+                        "xg_a": 1.41,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-14",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.02,
+                        "xg_a": 2.2,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-14",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.4,
+                        "xg_a": 0.98,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-14",
+                        "goles_h": 6,
+                        "goles_a": 0,
+                        "xg_h": 3.46,
+                        "xg_a": 0.12,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-15",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 2.67,
+                        "xg_a": 2.03,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-19",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.54,
+                        "xg_a": 0.61,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-20",
+                        "goles_h": 0,
+                        "goles_a": 4,
+                        "xg_h": 0.42,
+                        "xg_a": 4.5,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-20",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.06,
+                        "xg_a": 0.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-20",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 3.56,
+                        "xg_a": 1.96,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-20",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.91,
+                        "xg_a": 0.89,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-20",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.01,
+                        "xg_a": 0.5,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-21",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.31,
+                        "xg_a": 1.28,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-21",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.53,
+                        "xg_a": 2.09,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-21",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "81_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-21",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.96,
+                        "xg_a": 0.22,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-23",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.03,
+                        "xg_a": 0.86,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-23",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 3.31,
+                        "xg_a": 1.01,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-23",
+                        "goles_h": 1,
+                        "goles_a": 4,
+                        "xg_h": 1.7,
+                        "xg_a": 4.06,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-23",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.84,
+                        "xg_a": 2.41,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-24",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.58,
+                        "xg_a": 1.21,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-24",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 4.95,
+                        "xg_a": 1.62,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-24",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 2.83,
+                        "xg_a": 0.64,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-25",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.18,
+                        "xg_a": 1.05,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-25",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "298_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-26",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 1.08,
+                        "xg_a": 0.95,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-27",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.83,
+                        "xg_a": 1.28,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-27",
+                        "goles_h": 5,
+                        "goles_a": 2,
+                        "xg_h": 2.79,
+                        "xg_a": 1.03,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-27",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.04,
+                        "xg_a": 0.57,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-27",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.86,
+                        "xg_a": 1.56,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-28",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 1.89,
+                        "xg_a": 0.58,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-28",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 4.04,
+                        "xg_a": 0.82,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-28",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 3.01,
+                        "xg_a": 0.96,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-28",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.19,
+                        "xg_a": 0.58,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-09-30",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "79_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-03",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 0.69,
+                        "xg_a": 0.86,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-04",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "298_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-04",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.16,
+                        "xg_a": 2.23,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-04",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.73,
+                        "xg_a": 0.21,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-04",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 4.32,
+                        "xg_a": 0.96,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-05",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.85,
+                        "xg_a": 0.66,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-05",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 2.89,
+                        "xg_a": 2.48,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-05",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 2.07,
+                        "xg_a": 1.44,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-05",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.77,
+                        "xg_a": 0.68,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-05",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.27,
+                        "xg_a": 0.71,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-17",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "559_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-18",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": 1.26,
+                        "xg_a": 1.96,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-18",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.42,
+                        "xg_a": 1.69,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-18",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 0.98,
+                        "xg_a": 0.9,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-18",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 2.24,
+                        "xg_a": 0.98,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-19",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 0.82,
+                        "xg_a": 0.24,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-19",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.72,
+                        "xg_a": 2.14,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-19",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": 0.94,
+                        "xg_a": 2.53,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-19",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.53,
+                        "xg_a": 2.15,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-20",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 1.06,
+                        "xg_a": 0.32,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-24",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.64,
+                        "xg_a": 0.25,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-25",
+                        "goles_h": 3,
+                        "goles_a": 3,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "80_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-25",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.7,
+                        "xg_a": 1.11,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-25",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.36,
+                        "xg_a": 1.0,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-25",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.64,
+                        "xg_a": 2.62,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-26",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.87,
+                        "xg_a": 2.36,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-26",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 3.41,
+                        "xg_a": 1.12,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-26",
+                        "goles_h": 2,
+                        "goles_a": 3,
+                        "xg_h": 2.32,
+                        "xg_a": 1.54,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-26",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.55,
+                        "xg_a": 1.41,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-27",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 1.34,
+                        "xg_a": 0.88,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-10-31",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.4,
+                        "xg_a": 1.54,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-01",
+                        "goles_h": 4,
+                        "goles_a": 0,
+                        "xg_h": 2.71,
+                        "xg_a": 1.09,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-01",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.99,
+                        "xg_a": 0.38,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-01",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 1.84,
+                        "xg_a": 1.13,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-01",
+                        "goles_h": 4,
+                        "goles_a": 0,
+                        "xg_h": 2.9,
+                        "xg_a": 0.29,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-02",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.24,
+                        "xg_a": 1.92,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-02",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.18,
+                        "xg_a": 1.04,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-02",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.81,
+                        "xg_a": 0.55,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-02",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.82,
+                        "xg_a": 0.75,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-03",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "285_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-07",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.81,
+                        "xg_a": 1.47,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-08",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.26,
+                        "xg_a": 2.01,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-08",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.22,
+                        "xg_a": 0.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-08",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 3.04,
+                        "xg_a": 1.29,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-08",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.48,
+                        "xg_a": 1.47,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-09",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "87_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-09",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 1.61,
+                        "xg_a": 0.84,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-09",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.95,
+                        "xg_a": 1.59,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-09",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.3,
+                        "xg_a": 0.54,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-09",
+                        "goles_h": 2,
+                        "goles_a": 4,
+                        "xg_h": 0.51,
+                        "xg_a": 3.43,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-21",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.65,
+                        "xg_a": 0.67,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-22",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.31,
+                        "xg_a": 1.32,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-22",
+                        "goles_h": 4,
+                        "goles_a": 0,
+                        "xg_h": 2.33,
+                        "xg_a": 1.05,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-22",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": 1.28,
+                        "xg_a": 1.77,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-22",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.64,
+                        "xg_a": 1.38,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-23",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "90_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-23",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.58,
+                        "xg_a": 1.49,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-23",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.58,
+                        "xg_a": 1.48,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-23",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.6,
+                        "xg_a": 3.88,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-24",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.17,
+                        "xg_a": 1.8,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-28",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.34,
+                        "xg_a": 0.45,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-29",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.11,
+                        "xg_a": 1.11,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-29",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.51,
+                        "xg_a": 2.09,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-29",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 1.2,
+                        "xg_a": 2.81,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-29",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "92_94": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-30",
+                        "goles_h": 2,
+                        "goles_a": 3,
+                        "xg_h": 1.37,
+                        "xg_a": 1.63,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-30",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.74,
+                        "xg_a": 1.18,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-30",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.64,
+                        "xg_a": 0.6,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-11-30",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.05,
+                        "xg_a": 2.21,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-01",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.13,
+                        "xg_a": 0.9,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-02",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 3.46,
+                        "xg_a": 1.35,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-03",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": 0.92,
+                        "xg_a": 2.37,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-05",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "94_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-06",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 0.82,
+                        "xg_a": 0.28,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-06",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.89,
+                        "xg_a": 1.1,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-06",
+                        "goles_h": 3,
+                        "goles_a": 5,
+                        "xg_h": 2.74,
+                        "xg_a": 3.3,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-06",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.19,
+                        "xg_a": 0.77,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-07",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 1.6,
+                        "xg_a": 0.78,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-07",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.24,
+                        "xg_a": 0.64,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-07",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.58,
+                        "xg_a": 0.29,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-07",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 2.42,
+                        "xg_a": 1.61,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_88": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-08",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.75,
+                        "xg_a": 0.54,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_298": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-12",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.02,
+                        "xg_a": 1.17,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_95": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-13",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.07,
+                        "xg_a": 1.26,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_285": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-13",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.58,
+                        "xg_a": 0.31,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_79": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-13",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.14,
+                        "xg_a": 0.23,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-13",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.31,
+                        "xg_a": 0.75,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-14",
+                        "goles_h": 4,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "558_77": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-14",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.97,
+                        "xg_a": 1.67,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_86": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-14",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.31,
+                        "xg_a": 1.91,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_90": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-15",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 2.18,
+                        "xg_a": 0.79,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_89": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-19",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.16,
+                        "xg_a": 0.2,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_558": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-20",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "88_92": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-20",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.22,
+                        "xg_a": 1.63,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_263": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-20",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.39,
+                        "xg_a": 0.72,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_559": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-20",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 4.0,
+                        "xg_a": 1.51,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_78": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-21",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": 1.12,
+                        "xg_a": 1.26,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_81": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-21",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 2.16,
+                        "xg_a": 3.27,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_87": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-21",
+                        "goles_h": 4,
+                        "goles_a": 0,
+                        "xg_h": 3.67,
+                        "xg_a": 1.15,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_82": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-21",
+                        "goles_h": 4,
+                        "goles_a": 0,
+                        "xg_h": 3.46,
+                        "xg_a": 1.25,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_80": {
+                "partidos": [
+                    {
+                        "fecha": "2025-12-22",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.72,
+                        "xg_a": 0.91,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-02",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.66,
+                        "xg_a": 0.66,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-03",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 2.59,
+                        "xg_a": 1.79,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-03",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.87,
+                        "xg_a": 1.55,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-03",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": 1.52,
+                        "xg_a": 2.63,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-03",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 1.8,
+                        "xg_a": 2.94,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-04",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": 1.67,
+                        "xg_a": 1.65,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-04",
+                        "goles_h": 5,
+                        "goles_a": 1,
+                        "xg_h": 3.01,
+                        "xg_a": 0.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-04",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "89_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-04",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.48,
+                        "xg_a": 1.46,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-04",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.71,
+                        "xg_a": 1.37,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-09",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.24,
+                        "xg_a": 1.26,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-10",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "94_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-10",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 1.38,
+                        "xg_a": 0.84,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-10",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 0.98,
+                        "xg_a": 1.23,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-10",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.04,
+                        "xg_a": 0.24,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-11",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.05,
+                        "xg_a": 1.06,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-11",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.18,
+                        "xg_a": 1.59,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-12",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.26,
+                        "xg_a": 2.08,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-16",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 1.27,
+                        "xg_a": 1.82,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-17",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.55,
+                        "xg_a": 0.79,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-17",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 3.11,
+                        "xg_a": 2.28,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-17",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "90_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-17",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.35,
+                        "xg_a": 1.18,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-18",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.58,
+                        "xg_a": 0.75,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-18",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.77,
+                        "xg_a": 1.21,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_87": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-18",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 1.9,
+                        "xg_a": 1.32,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-18",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.56,
+                        "xg_a": 3.92,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-19",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.48,
+                        "xg_a": 2.5,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-23",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 3.24,
+                        "xg_a": 0.63,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-24",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": 0.67,
+                        "xg_a": 1.37,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-24",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 2.77,
+                        "xg_a": 1.76,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-24",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.43,
+                        "xg_a": 1.91,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_86": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-24",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.95,
+                        "xg_a": 1.62,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-25",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 1.43,
+                        "xg_a": 0.37,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-25",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "92_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-25",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.15,
+                        "xg_a": 1.63,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-25",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.67,
+                        "xg_a": 1.79,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-26",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.02,
+                        "xg_a": 1.11,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-30",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.2,
+                        "xg_a": 1.32,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-31",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "79_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-31",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 2.13,
+                        "xg_a": 0.91,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-31",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 0.41,
+                        "xg_a": 0.62,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-01-31",
+                        "goles_h": 1,
+                        "goles_a": 3,
+                        "xg_h": 0.84,
+                        "xg_a": 7.11,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_87": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-01",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.3,
+                        "xg_a": 1.07,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-01",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.17,
+                        "xg_a": 1.89,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-01",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 0.5,
+                        "xg_a": 0.26,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-01",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.89,
+                        "xg_a": 1.59,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-02",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 3.04,
+                        "xg_a": 1.24,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-06",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 2.04,
+                        "xg_a": 1.0,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-07",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.48,
+                        "xg_a": 1.01,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-07",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 1.77,
+                        "xg_a": 1.09,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-08",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 3.01,
+                        "xg_a": 1.79,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-08",
+                        "goles_h": 4,
+                        "goles_a": 2,
+                        "xg_h": 2.77,
+                        "xg_a": 0.62,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-08",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.96,
+                        "xg_a": 2.6,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-08",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.63,
+                        "xg_a": 0.84,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_86": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-08",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.57,
+                        "xg_a": 1.05,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-09",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 1.54,
+                        "xg_a": 0.74,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-13",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 2.33,
+                        "xg_a": 0.81,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-14",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.16,
+                        "xg_a": 2.81,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-14",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.62,
+                        "xg_a": 0.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-14",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.35,
+                        "xg_a": 1.39,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-14",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 3.06,
+                        "xg_a": 1.66,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-15",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "87_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-15",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.75,
+                        "xg_a": 0.75,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-15",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 1.46,
+                        "xg_a": 0.74,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-15",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.73,
+                        "xg_a": 2.05,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-16",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.89,
+                        "xg_a": 2.7,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-18",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.77,
+                        "xg_a": 2.4,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-20",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 3.38,
+                        "xg_a": 0.78,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-21",
+                        "goles_h": 3,
+                        "goles_a": 3,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "90_87": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-21",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.14,
+                        "xg_a": 1.3,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_86": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-21",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.31,
+                        "xg_a": 2.02,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-21",
+                        "goles_h": 4,
+                        "goles_a": 2,
+                        "xg_h": 3.29,
+                        "xg_a": 1.04,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-22",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.25,
+                        "xg_a": 0.28,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-22",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 4.24,
+                        "xg_a": 0.6,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-22",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.94,
+                        "xg_a": 0.02,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-22",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.38,
+                        "xg_a": 1.91,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-23",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 2.14,
+                        "xg_a": 2.06,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-27",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.77,
+                        "xg_a": 1.3,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-28",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.36,
+                        "xg_a": 0.43,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-28",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 3.55,
+                        "xg_a": 1.36,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-28",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 0.75,
+                        "xg_a": 0.93,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-02-28",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "285_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-01",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.82,
+                        "xg_a": 0.83,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-01",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.31,
+                        "xg_a": 0.26,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-01",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.48,
+                        "xg_a": 0.66,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-01",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.57,
+                        "xg_a": 0.7,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-02",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 2.02,
+                        "xg_a": 0.48,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-04",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "558_86": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-06",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.91,
+                        "xg_a": 0.64,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-07",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 3.09,
+                        "xg_a": 1.03,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-07",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.82,
+                        "xg_a": 1.92,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-07",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 3.58,
+                        "xg_a": 0.31,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-07",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 1.05,
+                        "xg_a": 0.56,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-08",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.31,
+                        "xg_a": 1.62,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-08",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 0.82,
+                        "xg_a": 1.25,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_87": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-08",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.15,
+                        "xg_a": 0.21,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-08",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 2.52,
+                        "xg_a": 1.61,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-09",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "263_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-13",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 0.29,
+                        "xg_a": 0.87,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-14",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.19,
+                        "xg_a": 1.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-14",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 2.14,
+                        "xg_a": 1.58,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-14",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "86_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-14",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 1.73,
+                        "xg_a": 1.37,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-15",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.15,
+                        "xg_a": 1.35,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-15",
+                        "goles_h": 5,
+                        "goles_a": 2,
+                        "xg_h": 3.86,
+                        "xg_a": 1.04,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-15",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.88,
+                        "xg_a": 0.65,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-15",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 2.91,
+                        "xg_a": 0.62,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-16",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.68,
+                        "xg_a": 1.46,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-20",
+                        "goles_h": 3,
+                        "goles_a": 1,
+                        "xg_h": 3.36,
+                        "xg_a": 0.89,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-21",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.52,
+                        "xg_a": 1.52,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-21",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.51,
+                        "xg_a": 2.06,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-21",
+                        "goles_h": 4,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "79_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-21",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 2.26,
+                        "xg_a": 0.23,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-21",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.51,
+                        "xg_a": 1.71,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_87": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-22",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.92,
+                        "xg_a": 2.2,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-22",
+                        "goles_h": 3,
+                        "goles_a": 4,
+                        "xg_h": 1.71,
+                        "xg_a": 1.67,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-22",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.93,
+                        "xg_a": 0.59,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-03-22",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 2.97,
+                        "xg_a": 1.4,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-03",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.51,
+                        "xg_a": 0.6,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-04",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 2.96,
+                        "xg_a": 0.32,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_86": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-04",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.04,
+                        "xg_a": 1.51,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "90_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-04",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 2.0,
+                        "xg_a": 0.14,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-04",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 0.92,
+                        "xg_a": 2.69,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-05",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.96,
+                        "xg_a": 0.52,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-05",
+                        "goles_h": 2,
+                        "goles_a": 3,
+                        "xg_h": 0.72,
+                        "xg_a": 1.46,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-05",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "263_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-05",
+                        "goles_h": 2,
+                        "goles_a": 2,
+                        "xg_h": 1.66,
+                        "xg_a": 1.61,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-06",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 0.65,
+                        "xg_a": 0.44,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-10",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.98,
+                        "xg_a": 0.47,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-11",
+                        "goles_h": 3,
+                        "goles_a": 3,
+                        "xg_h": 1.29,
+                        "xg_a": 1.21,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-11",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.03,
+                        "xg_a": 2.77,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-11",
+                        "goles_h": 4,
+                        "goles_a": 1,
+                        "xg_h": 3.31,
+                        "xg_a": 1.13,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "559_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-11",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.66,
+                        "xg_a": 0.86,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "79_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-12",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.53,
+                        "xg_a": 0.41,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_87": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-12",
+                        "goles_h": 3,
+                        "goles_a": 0,
+                        "xg_h": 2.55,
+                        "xg_a": 1.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "558_1048": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-12",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "77_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-12",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": 1.32,
+                        "xg_a": 1.55,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-13",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 3.33,
+                        "xg_a": 0.29,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "77_79": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-21",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 0.49,
+                        "xg_a": 1.4,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "89_95": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-21",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 2.24,
+                        "xg_a": 1.39,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "86_263": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-21",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.5,
+                        "xg_a": 1.63,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "298_90": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-21",
+                        "goles_h": 2,
+                        "goles_a": 3,
+                        "xg_h": 1.73,
+                        "xg_a": 1.25,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "285_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-22",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 3.63,
+                        "xg_a": 0.85,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "92_82": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-22",
+                        "goles_h": 0,
+                        "goles_a": 1,
+                        "xg_h": 1.9,
+                        "xg_a": 0.22,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "81_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-22",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 1.54,
+                        "xg_a": 1.07,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "88_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-23",
+                        "goles_h": 2,
+                        "goles_a": 0,
+                        "xg_h": 1.21,
+                        "xg_a": 0.44,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_80": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-23",
+                        "goles_h": 1,
+                        "goles_a": 0,
+                        "xg_h": 2.07,
+                        "xg_a": 1.69,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_94": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-23",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "90_86": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-24",
+                        "goles_h": 1,
+                        "goles_a": 1,
+                        "xg_h": 1.02,
+                        "xg_a": 1.1,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "263_89": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-25",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 1.41,
+                        "xg_a": 0.22,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "82_81": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-25",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 0.61,
+                        "xg_a": 2.05,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "95_298": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-25",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.31,
+                        "xg_a": 1.39,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "78_77": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-25",
+                        "goles_h": 3,
+                        "goles_a": 2,
+                        "xg_h": 2.48,
+                        "xg_a": 0.97,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "87_92": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-26",
+                        "goles_h": 3,
+                        "goles_a": 3,
+                        "xg_h": 3.18,
+                        "xg_a": 2.4,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "1048_285": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-26",
+                        "goles_h": 1,
+                        "goles_a": 2,
+                        "xg_h": null,
+                        "xg_a": null,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 0
+            },
+            "79_559": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-26",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.14,
+                        "xg_a": 0.55,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "94_558": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-26",
+                        "goles_h": 2,
+                        "goles_a": 1,
+                        "xg_h": 2.41,
+                        "xg_a": 2.05,
+                        "winner": "HOME_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 1
+            },
+            "80_88": {
+                "partidos": [
+                    {
+                        "fecha": "2026-04-27",
+                        "goles_h": 0,
+                        "goles_a": 0,
+                        "xg_h": 0.85,
+                        "xg_a": 1.39,
+                        "winner": "DRAW"
+                    }
+                ],
+                "temporadas_con_xg": 1
             }
         }
     },
-    "last_update": "2026-05-01 04:36:57",
+    "last_update": "2026-05-01 05:20:11",
     "meta": {
         "partidos_con_xg": 266,
         "partidos_sin_xg": 0,
         "partidos_sin_understat": 64,
         "xg_weight": 0.6,
-        "time_decay_lambda": 0.007
+        "time_decay_lambda": 0.007,
+        "pares_h2h": 330
     }
 }
