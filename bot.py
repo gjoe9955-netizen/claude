@@ -362,20 +362,32 @@ async def construir_mapa_ids_apisports():
 
     try:
         r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10)
+        logging.info(f"[API-Sports] GET /teams status={r.status_code}")
+
         if r.status_code != 200:
-            logging.error(f"[API-Sports] Error al obtener equipos: {r.status_code}")
+            logging.error(f"[API-Sports] Error al obtener equipos: {r.status_code} — {r.text[:200]}")
             return
 
-        equipos = r.json().get("response", [])
+        data = r.json()
+        errores = data.get("errors", {})
+        if errores:
+            logging.error(f"[API-Sports] Errores en respuesta: {errores}")
+            return
+
+        equipos = data.get("response", [])
+        if not equipos:
+            logging.error("[API-Sports] Respuesta vacía — verifica la key y los parámetros.")
+            return
+
         for item in equipos:
             nombre = item["team"]["name"]
             id_as = item["team"]["id"]
             _APISPORTS_ID_MAP[nombre.lower()] = id_as
 
-        logging.info(f"[API-Sports] Mapa de IDs construido: {len(_APISPORTS_ID_MAP)} equipos.")
+        logging.info(f"[API-Sports] ✅ Mapa construido: {len(_APISPORTS_ID_MAP)} equipos → {list(_APISPORTS_ID_MAP.keys())}")
 
     except Exception as e:
-        logging.error(f"[API-Sports] Error construyendo mapa: {e}")
+        logging.error(f"[API-Sports] Excepción construyendo mapa: {e}", exc_info=True)
 
 
 def resolver_id_apisports(nombre_equipo: str) -> int | None:
@@ -403,6 +415,11 @@ async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
     """
     if not API_SPORTS_KEY:
         return "H2H: Sin API-Sports key.", False, 0, 0, 0
+
+    # Si el mapa está vacío (fallo al arrancar), reintentarlo ahora
+    if not _APISPORTS_ID_MAP:
+        logging.warning("[H2H] Mapa vacío, reintentando construcción...")
+        await construir_mapa_ids_apisports()
 
     id_l = resolver_id_apisports(nombre_local)
     id_v = resolver_id_apisports(nombre_visita)
@@ -457,36 +474,6 @@ async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
     except Exception as e:
         logging.error(f"[H2H] Error api-sports: {e}")
         return "H2H: Error de conexión.", False, 0, 0, 0
-
-
-
-    if not id_l or not id_v:
-        return "H2H: Sin IDs válidos.", False, 0, 0, 0
-    
-    headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
-    try:
-        url = f"https://api.football-data.org/v4/teams/{id_l}/matches?competitors={id_v}&status=FINISHED"
-        r = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            matches = r.json().get('matches', [])
-            if matches:
-                l, v, e = 0, 0, 0
-                for m in matches[:5]:
-                    w = m['score']['winner']
-                    home_id = m['homeTeam']['id']
-                    if home_id == id_l:
-                        if w == 'HOME_TEAM': l += 1
-                        elif w == 'AWAY_TEAM': v += 1
-                        else: e += 1
-                    else:
-                        if w == 'HOME_TEAM': v += 1
-                        elif w == 'AWAY_TEAM': l += 1
-                        else: e += 1
-                total = l + v + e
-                return f"Local {l} | Visitante {v} | Empates {e} (sede-ajustado)", True, l, v, total
-        return "H2H: Sin datos directos.", False, 0, 0, 0
-    except:
-        return "H2H: Error API.", False, 0, 0, 0
 
 
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
