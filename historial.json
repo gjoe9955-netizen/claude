@@ -50,5 +50,18 @@
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
         "status": "⏳ PENDIENTE"
+    },
+    {
+        "fecha": "2026-05-01 00:04",
+        "partido": "Girona FC vs RCD Mallorca",
+        "pick": "Girona FC",
+        "poisson": "47.1%",
+        "cuota": 2.057,
+        "edge": "2.1%",
+        "stake": "0.35%",
+        "nivel": "BRONCE 🥉",
+        "pick_riesgo": "Sin valor alternativo",
+        "stake_riesgo": "0%",
+        "status": "⏳ PENDIENTE"
     }
 ]
