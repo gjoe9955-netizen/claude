@@ -37,5 +37,18 @@
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
         "status": "⏳ PENDIENTE"
+    },
+    {
+        "fecha": "2026-04-30 21:19",
+        "partido": "RCD Mallorca vs Girona FC",
+        "pick": "RCD Mallorca",
+        "poisson": "43.4%",
+        "cuota": 2.675,
+        "edge": "8.1%",
+        "stake": "1.21%",
+        "nivel": "PLATA 🥈",
+        "pick_riesgo": "Sin valor alternativo",
+        "stake_riesgo": "0%",
+        "status": "⏳ PENDIENTE"
     }
 ]
