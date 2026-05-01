@@ -1290,7 +1290,8 @@ INSTRUCCIONES PARA TU ANÁLISIS:
 """
 
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
-    analisis = html.escape(analisis_raw)
+    import re as _re
+    analisis = html.escape(_re.sub(r"<[^>]+>", "", analisis_raw or ""))
 
     nodos_txt = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
@@ -1322,7 +1323,7 @@ INSTRUCCIONES PARA TU ANÁLISIS:
         )
         auditoria_raw = await ejecutar_ia("auditor", prompt_a)
         nodos_txt += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
-        auditor_block = f"\n\n<b>◆ AUDITOR</b>\n{html.escape(auditoria_raw)}"
+        auditor_block = f"\n\n<b>◆ AUDITOR</b>\n{html.escape(_re.sub(r'<[^>]+>', '', auditoria_raw or ''))}"
     else:
         auditor_block = ""
 
