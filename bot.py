@@ -138,11 +138,27 @@ async def obtener_contexto_real(l_q, v_q):
 
             if l_q.lower() in texto_analisis:
                 if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
-                    penalty_local = 0.93
+                    if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
+                        penalty_local = min(penalty_local, 0.88)
+                    elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
+                        penalty_local = min(penalty_local, 0.95)
+                    else:
+                        penalty_local = min(penalty_local, 0.93)
+                    # Múltiples bajas
+                    if sum(1 for p in PALABRAS_BAJA_LOCAL if p in texto_analisis) >= 3:
+                        penalty_local = min(penalty_local, 0.85)
 
             if v_q.lower() in texto_analisis:
                 if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
-                    penalty_visita = 0.93
+                    if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
+                        penalty_visita = min(penalty_visita, 0.88)
+                    elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
+                        penalty_visita = min(penalty_visita, 0.95)
+                    else:
+                        penalty_visita = min(penalty_visita, 0.93)
+                    # Múltiples bajas
+                    if sum(1 for p in PALABRAS_BAJA_VISITA if p in texto_analisis) >= 3:
+                        penalty_visita = min(penalty_visita, 0.85)
 
         contexto_final = contexto if contexto else "No se encontraron noticias recientes."
         return contexto_final, penalty_local, penalty_visita
@@ -910,9 +926,6 @@ async def handle_pronostico(message):
     prob_market_e = (prob_simple_e + shin_e) / 2
     prob_market_v = (prob_simple_v + shin_v) / 2
 
-    p_win = (prob_poisson_calibrado * 0.90) + (prob_market_l * 0.10)
-    p_percent = p_win * 100
-
     ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
 
     prob_poisson_empate = 0
@@ -1251,6 +1264,7 @@ PARTIDO: {m_l} vs {m_v}
 ── BAJAS Y NOTICIAS (SERPER + JINA) ──
 •{serper_txt}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
+• Noticias: {contexto_noticias[:1000]}
 
 ═══════════════════════════════════════
 RESULTADO DEL MODELO
