@@ -508,9 +508,98 @@ def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
     return 1.0
 
 
+
 # ============================================================
-# NUEVO: Método Shin (1993)
+# Elo Dinámico — calculado desde historial de partidos de la API
 # ============================================================
+_ELO_CACHE = {"data": None, "ts": None}
+ELO_CACHE_TTL = 3600  # 1 hora
+
+async def calcular_elo_equipos(tabla: dict) -> dict:
+    """
+    Calcula ratings Elo para todos los equipos de LaLiga usando
+    los partidos FINISHED de la temporada actual.
+    K=32, Elo base=1500. Resultado cacheado 1 hora.
+    Devuelve dict {team_id: elo_rating}.
+    """
+    ahora = datetime.now(timezone.utc)
+    if (
+        _ELO_CACHE["data"] and _ELO_CACHE["ts"] and
+        (ahora - _ELO_CACHE["ts"]).total_seconds() < ELO_CACHE_TTL
+    ):
+        return _ELO_CACHE["data"]
+
+    try:
+        data = await api_football_call("matches?status=FINISHED")
+        if not data or 'matches' not in data:
+            return {}
+
+        matches = sorted(data['matches'], key=lambda m: m['utcDate'])
+
+        # Inicializar Elo base para todos los equipos conocidos en tabla
+        elos = {tid: 1500.0 for tid in tabla}
+        K = 32
+
+        for m in matches:
+            h_id = m['homeTeam']['id']
+            a_id = m['awayTeam']['id']
+            winner = m['score'].get('winner')
+            if not winner or h_id not in elos or a_id not in elos:
+                continue
+
+            elo_h = elos[h_id]
+            elo_a = elos[a_id]
+
+            # Probabilidad esperada Elo
+            exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
+            exp_a = 1 - exp_h
+
+            # Resultado real
+            if winner == 'HOME_TEAM':
+                s_h, s_a = 1.0, 0.0
+            elif winner == 'AWAY_TEAM':
+                s_h, s_a = 0.0, 1.0
+            else:  # DRAW
+                s_h, s_a = 0.5, 0.5
+
+            elos[h_id] = elo_h + K * (s_h - exp_h)
+            elos[a_id] = elo_a + K * (s_a - exp_a)
+
+        _ELO_CACHE["data"] = elos
+        _ELO_CACHE["ts"] = ahora
+        logging.info(f"[Elo] Calculado para {len(elos)} equipos.")
+        return elos
+
+    except Exception as e:
+        logging.error(f"[Elo] Error: {e}")
+        return {}
+
+
+def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
+    """
+    Convierte diferencia Elo en factor multiplicador para λH y λA.
+    Máximo ajuste: ±8% (equivalente a ~200 puntos de diferencia).
+    """
+    MAX_AJUSTE = 0.08
+    MAX_DIFF = 200.0
+
+    diff = elo_local - elo_visita
+    intensidad = max(-1.0, min(diff / MAX_DIFF, 1.0))
+    ajuste = MAX_AJUSTE * intensidad
+
+    factor_lh = round(1.0 + ajuste, 4)
+    factor_la = round(1.0 - ajuste, 4)
+
+    if abs(ajuste) < 0.01:
+        texto = f"Elo ⚖️ Equilibrado ({elo_local:.0f} vs {elo_visita:.0f})"
+    elif diff > 0:
+        texto = f"Elo 📈 Local superior ({elo_local:.0f} vs {elo_visita:.0f}, +{ajuste*100:.1f}% lh)"
+    else:
+        texto = f"Elo 📉 Visita superior ({elo_local:.0f} vs {elo_visita:.0f}, +{abs(ajuste)*100:.1f}% la)"
+
+    return factor_lh, factor_la, texto
+
+
 def calcular_shin(odds_l, odds_e, odds_v):
     """
     Método Shin (1993): estima probabilidades verdaderas desde cuotas
@@ -605,7 +694,7 @@ async def handle_pronostico(message):
         await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
     l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V10 (Poisson+DC+H2H+Forma+Tabla+Odds+Shin)...")
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V11 (Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin)...")
 
     full_data, check_json = await obtener_modelo()
     if not full_data:
@@ -642,6 +731,9 @@ async def handle_pronostico(message):
         obtener_posiciones_tabla()
     )
 
+    # Elo requiere tabla ya calculada, se ejecuta después
+    elos = await calcular_elo_equipos(tabla)
+
     # --- PASO 1: Lambdas base desde Poisson ---
     avg = full_data[liga]['averages']
     lh_base = l_s['att_h'] * v_s['def_a'] * avg['league_home']
@@ -663,9 +755,14 @@ async def handle_pronostico(message):
             t_l['pos'], t_v['pos'], t_l['puntos'], t_v['puntos']
         )
 
+    # --- PASO 4b: Ajuste Elo dinámico ---
+    factor_lh_elo, factor_la_elo, elo_texto = 1.0, 1.0, "Elo: Sin datos"
+    if elos and id_l in elos and id_v in elos:
+        factor_lh_elo, factor_la_elo, elo_texto = calcular_factor_elo(elos[id_l], elos[id_v])
+
     # --- PASO 5: Combinar todos los factores sobre las lambdas ---
-    lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * penalty_local
-    la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * penalty_visita
+    lh = lh_base * factor_lh_h2h * factor_lh_forma * factor_lh_tabla * factor_lh_elo * penalty_local
+    la = la_base * factor_la_h2h * factor_la_forma * factor_la_tabla * factor_la_elo * penalty_visita
 
     # --- PASO 6: Probabilidad Poisson 7x7 + Dixon-Coles ---
     prob_poisson = 0
@@ -928,6 +1025,7 @@ async def handle_pronostico(message):
         f"<b>🏠</b> {forma_local_txt}\n"
         f"<b>🚩</b> {forma_visita_txt}\n"
         f"<b>🏆</b> {tabla_texto}\n"
+        f"<b>⚡</b> {elo_texto}\n"
         f"<b>📰</b>{serper_txt}\n"
         f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {'✅' if check_h2h else '❌'} H2H</b>\n"
     )
@@ -992,6 +1090,11 @@ PARTIDO: {m_l} vs {m_v}
 ── POSICIÓN EN TABLA ──
 • {tabla_texto}
 
+── ELO DINÁMICO (temporada actual) ──
+• {elo_texto}
+• Factor Elo local: ×{factor_lh_elo:.4f} | Factor Elo visita: ×{factor_la_elo:.4f}
+• Elo local: {elos.get(id_l, 'N/A'):.0f} pts | Elo visita: {elos.get(id_v, 'N/A'):.0f} pts
+
 ── BAJAS Y NOTICIAS (SERPER) ──
 •{serper_txt}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
@@ -1046,7 +1149,7 @@ INSTRUCCIONES PARA TU ANÁLISIS:
     else:
         auditor_block = ""
 
-    footer = f"\n\n<i>{'—'*18}\nV10 · {nodos_txt}</i>"
+    footer = f"\n\n<i>{'—'*18}\nV11 · {nodos_txt}</i>"
     final = f"{header}{analisis}{auditor_block}{footer}"
 
     await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode='HTML')
