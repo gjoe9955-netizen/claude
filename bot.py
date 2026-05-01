@@ -24,16 +24,7 @@ FOOTBALL_DATA_KEY = os.getenv('FOOTBALL_DATA_API_KEY')
 ODDS_API_KEY = os.getenv('API_KEY_ODDS')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 SERPER_KEY = os.getenv('SERPER_API_KEY')
-API_SPORTS_KEY = os.getenv('API_SPORTS_KEY')
-
-# --- Cache mapeo nombre → id de api-sports (se construye al arrancar) ---
-_APISPORTS_ID_MAP = {}  # {"Girona FC": 547, ...}
-LALIGA_ID = 140
-LALIGA_SEASON = 2024  # FIX: plan free solo soporta 2022-2024
-
-# --- Cache fixtures históricos api-sports (temporadas 2022-2024) ---
-_FIXTURES_HISTORICOS = []   # lista de partidos ordenados cronológicamente
-_FIXTURES_HIST_TS   = None  # timestamp de última carga
+# API_SPORTS_KEY se mantiene en .env pero ya no se usa en el flujo principal
 
 OFFSET_JUAREZ = -6
 URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
@@ -343,237 +334,107 @@ async def api_football_call(endpoint):
         return r.json() if r.status_code == 200 else None
     except: return None
 
-# --- Mapeo de IDs: football-data → api-sports (se ejecuta al arrancar) ---
-async def construir_mapa_ids_apisports():
-    """
-    Descarga todos los equipos de LaLiga desde api-sports y construye
-    un dict {nombre_normalizado: id_apisports} en memoria.
-    Se llama una sola vez al arrancar el bot.
-    """
-    if not API_SPORTS_KEY:
-        logging.warning("[API-Sports] API_SPORTS_KEY no configurada, H2H desactivado.")
-        return
-
-    url = "https://v3.football.api-sports.io/teams"
-    headers = {"x-apisports-key": API_SPORTS_KEY}
-    params = {"league": LALIGA_ID, "season": LALIGA_SEASON}
-
-    try:
-        r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10)
-        logging.info(f"[API-Sports] GET /teams status={r.status_code}")
-
-        if r.status_code != 200:
-            logging.error(f"[API-Sports] Error al obtener equipos: {r.status_code} — {r.text[:200]}")
-            return
-
-        data = r.json()
-        errores = data.get("errors", {})
-        if errores:
-            logging.error(f"[API-Sports] Errores en respuesta: {errores}")
-            return
-
-        equipos = data.get("response", [])
-        if not equipos:
-            logging.error("[API-Sports] Respuesta vacía — verifica la key y los parámetros.")
-            return
-
-        for item in equipos:
-            nombre = item["team"]["name"]
-            id_as = item["team"]["id"]
-            _APISPORTS_ID_MAP[nombre.lower()] = id_as
-
-        logging.info(f"[API-Sports] ✅ Mapa construido: {len(_APISPORTS_ID_MAP)} equipos → {list(_APISPORTS_ID_MAP.keys())}")
-
-    except Exception as e:
-        logging.error(f"[API-Sports] Excepción construyendo mapa: {e}", exc_info=True)
-
-
-def resolver_id_apisports(nombre_equipo: str) -> int | None:
-    """
-    Busca el id de api-sports para un equipo dado su nombre.
-    Intenta match exacto primero, luego parcial.
-    """
-    nombre_lower = nombre_equipo.lower()
-    if nombre_lower in _APISPORTS_ID_MAP:
-        return _APISPORTS_ID_MAP[nombre_lower]
-    for key, id_as in _APISPORTS_ID_MAP.items():
-        if nombre_lower in key or key in nombre_lower:
-            return id_as
-    return None
-
 
 # ============================================================
-# Fixtures históricos api-sports (2022-2024) para Elo
+# H2H desde football-data.org — sede-corregido
 # ============================================================
 
-async def descargar_fixtures_apisports(season: int) -> list:
-    """
-    Descarga todos los partidos FINISHED de LaLiga para una temporada dada
-    desde api-sports. Devuelve lista de dicts normalizados con las mismas
-    claves que usan los fixtures de football-data.org para el Elo:
-      {utcDate, homeTeam_id_as, awayTeam_id_as, winner}
-    Retorna lista vacía si hay error o plan no lo permite.
-    """
-    if not API_SPORTS_KEY:
-        return []
+# Cache de partidos FINISHED de la temporada actual
+_PARTIDOS_FD_CACHE = {"data": None, "ts": None}
+PARTIDOS_FD_TTL = 3600  # 1 hora
 
-    url = "https://v3.football.api-sports.io/fixtures"
-    headers = {"x-apisports-key": API_SPORTS_KEY}
-    params = {
-        "league": LALIGA_ID,
-        "season": season,
-        "status": "FT"   # Full Time = finalizado
-    }
+
+async def obtener_partidos_finished() -> list:
+    """
+    Descarga y cachea todos los partidos FINISHED de LaLiga
+    desde football-data.org. TTL: 1 hora.
+    """
+    ahora = datetime.now(timezone.utc)
+    if (
+        _PARTIDOS_FD_CACHE["data"] is not None and
+        _PARTIDOS_FD_CACHE["ts"] and
+        (ahora - _PARTIDOS_FD_CACHE["ts"]).total_seconds() < PARTIDOS_FD_TTL
+    ):
+        return _PARTIDOS_FD_CACHE["data"]
 
     try:
-        r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=15)
-        logging.info(f"[API-Sports] GET /fixtures season={season} status={r.status_code}")
-
-        if r.status_code != 200:
-            logging.error(f"[API-Sports] fixtures season={season} HTTP {r.status_code}")
-            return []
-
-        data = r.json()
-        errores = data.get("errors", {})
-        if errores:
-            logging.error(f"[API-Sports] fixtures season={season} errores: {errores}")
-            return []
-
-        partidos_raw = data.get("response", [])
-        partidos = []
-
-        for p in partidos_raw:
-            fecha = p["fixture"]["date"]           # ISO 8601
-            home_id = p["teams"]["home"]["id"]     # id api-sports
-            away_id = p["teams"]["away"]["id"]
-            goles_h = p["goals"]["home"]
-            goles_a = p["goals"]["away"]
-
-            if goles_h is None or goles_a is None:
-                continue
-
-            if goles_h > goles_a:
-                winner = "HOME_TEAM"
-            elif goles_a > goles_h:
-                winner = "AWAY_TEAM"
-            else:
-                winner = "DRAW"
-
-            partidos.append({
-                "utcDate":       fecha,
-                "homeTeam_id_as": home_id,
-                "awayTeam_id_as": away_id,
-                "winner":        winner,
-                "source":        "apisports"
-            })
-
-        logging.info(f"[API-Sports] ✅ season={season}: {len(partidos)} partidos descargados")
-        return partidos
-
+        data = await api_football_call("matches?status=FINISHED")
+        if data and "matches" in data:
+            _PARTIDOS_FD_CACHE["data"] = data["matches"]
+            _PARTIDOS_FD_CACHE["ts"] = ahora
+            logging.info(f"[FD] ✅ {len(data['matches'])} partidos FINISHED cargados en cache.")
+            return data["matches"]
     except Exception as e:
-        logging.error(f"[API-Sports] Excepción fixtures season={season}: {e}", exc_info=True)
-        return []
+        logging.error(f"[FD] Error obteniendo partidos FINISHED: {e}")
+
+    # Si falla, devolver cache anterior si existe
+    return _PARTIDOS_FD_CACHE["data"] or []
 
 
-async def construir_historial_elo():
+async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombre_visita: str):
     """
-    Descarga fixtures de las temporadas 2022, 2023 y 2024 desde api-sports
-    y los guarda en _FIXTURES_HISTORICOS ordenados cronológicamente.
-    Se llama una vez al arrancar. TTL: no se refresca (son temporadas cerradas).
+    Calcula H2H desde los partidos FINISHED de football-data.org,
+    filtrando solo los partidos donde id_local jugó como local
+    contra id_visita. Sede-corregido.
+    Devuelve (texto, check_h2h, home_wins, away_wins, total).
     """
-    global _FIXTURES_HISTORICOS, _FIXTURES_HIST_TS
+    partidos = await obtener_partidos_finished()
 
-    if _FIXTURES_HISTORICOS:
-        logging.info("[Elo-Hist] Ya cargado, omitiendo.")
-        return
+    if not partidos:
+        return "H2H: Sin datos de partidos.", False, 0, 0, 0
 
-    logging.info("[Elo-Hist] Descargando historial api-sports (2022-2024)...")
+    partidos_sede = [
+        m for m in partidos
+        if m["homeTeam"]["id"] == id_local and m["awayTeam"]["id"] == id_visita
+    ]
 
-    # Descargar las 3 temporadas en paralelo
-    resultados = await asyncio.gather(
-        descargar_fixtures_apisports(2022),
-        descargar_fixtures_apisports(2023),
-        descargar_fixtures_apisports(2024),
-    )
+    # Completar con los últimos 10 enfrentamientos en cualquier sede si hay pocos
+    if len(partidos_sede) < 3:
+        partidos_cualquier_sede = [
+            m for m in partidos
+            if (
+                (m["homeTeam"]["id"] == id_local and m["awayTeam"]["id"] == id_visita) or
+                (m["homeTeam"]["id"] == id_visita and m["awayTeam"]["id"] == id_local)
+            )
+        ]
+        # Ordenar por fecha descendente y tomar los más recientes
+        partidos_cualquier_sede.sort(key=lambda m: m["utcDate"], reverse=True)
+        partidos_sede = partidos_cualquier_sede[:10]
+        modo_sede = False
+    else:
+        partidos_sede = partidos_sede[:10]
+        modo_sede = True
 
-    todos = []
-    for lista in resultados:
-        todos.extend(lista)
+    if not partidos_sede:
+        return "H2H: Sin enfrentamientos registrados esta temporada.", False, 0, 0, 0
 
-    # Ordenar cronológicamente para que el Elo se calcule en secuencia correcta
-    todos.sort(key=lambda p: p["utcDate"])
-
-    _FIXTURES_HISTORICOS = todos
-    _FIXTURES_HIST_TS = datetime.now(timezone.utc)
-
-    logging.info(f"[Elo-Hist] ✅ Total partidos históricos: {len(_FIXTURES_HISTORICOS)} (2022-2024)")
-
-
-# --- H2H con api-sports (sede-corregido) ---
-async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
-    """
-    Obtiene H2H desde api-sports filtrando solo partidos jugados
-    en casa del equipo local actual.
-    """
-    if not API_SPORTS_KEY:
-        return "H2H: Sin API-Sports key.", False, 0, 0, 0
-
-    if not _APISPORTS_ID_MAP:
-        logging.warning("[H2H] Mapa vacío, reintentando construcción...")
-        await construir_mapa_ids_apisports()
-
-    id_l = resolver_id_apisports(nombre_local)
-    id_v = resolver_id_apisports(nombre_visita)
-
-    if not id_l or not id_v:
-        logging.warning(f"[H2H] IDs no encontrados: {nombre_local}={id_l}, {nombre_visita}={id_v}")
-        return "H2H: Equipos no encontrados en api-sports.", False, 0, 0, 0
-
-    url = "https://v3.football.api-sports.io/fixtures/headtohead"
-    headers = {"x-apisports-key": API_SPORTS_KEY}
-    params = {"h2h": f"{id_l}-{id_v}", "last": 20}
-
-    try:
-        r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10)
-        if r.status_code != 200:
-            return "H2H: Error API-Sports.", False, 0, 0, 0
-
-        partidos = r.json().get("response", [])
-        if not partidos:
-            return "H2H: Sin partidos registrados.", False, 0, 0, 0
-
-        partidos_en_casa = [
-            p for p in partidos
-            if p["teams"]["home"]["id"] == id_l
-        ][:10]
-
-        if not partidos_en_casa:
-            return "H2H: Sin partidos en esta sede.", False, 0, 0, 0
-
-        l, v, e = 0, 0, 0
-        for p in partidos_en_casa:
-            goles_h = p["goals"]["home"]
-            goles_a = p["goals"]["away"]
-            if goles_h is None or goles_a is None:
-                continue
-            if goles_h > goles_a:
+    l, v, e = 0, 0, 0
+    for m in partidos_sede:
+        winner = m["score"].get("winner")
+        if not winner:
+            continue
+        home_id = m["homeTeam"]["id"]
+        if winner == "HOME_TEAM":
+            if home_id == id_local:
                 l += 1
-            elif goles_a > goles_h:
+            else:
+                v += 1
+        elif winner == "AWAY_TEAM":
+            if home_id == id_local:
                 v += 1
             else:
-                e += 1
+                l += 1
+        else:
+            e += 1
 
-        total = l + v + e
-        if total == 0:
-            return "H2H: Sin resultados válidos.", False, 0, 0, 0
+    total = l + v + e
+    if total == 0:
+        return "H2H: Sin resultados válidos.", False, 0, 0, 0
 
-        texto = f"H2H (en casa · {total} partidos)"
-        logging.info(f"[H2H] {nombre_local} vs {nombre_visita}: L={l} V={v} E={e} (sede correcta)")
-        return texto, True, l, v, total
-
-    except Exception as e:
-        logging.error(f"[H2H] Error api-sports: {e}")
-        return "H2H: Error de conexión.", False, 0, 0, 0
+    sede_txt = "en casa" if modo_sede else "cualquier sede"
+    texto = f"H2H ({sede_txt} · {total} partidos)"
+    logging.info(f"[H2H-FD] {nombre_local} vs {nombre_visita}: L={l} V={v} E={e} ({sede_txt})")
+    return texto, True, l, v, total
 
 
 def calcular_factor_h2h(home_wins, away_wins, total_partidos):
@@ -715,47 +576,19 @@ def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
 
 
 # ============================================================
-# Elo Dinámico — temporada actual (football-data.org) +
-#               historial 2022-2024 (api-sports)
+# Elo Dinámico — solo football-data.org (temporada actual)
 # ============================================================
 _ELO_CACHE = {"data": None, "ts": None}
 ELO_CACHE_TTL = 3600  # 1 hora
 
-# Tabla de conversión: id api-sports → id football-data.org
-# Se construye dinámicamente cruzando _APISPORTS_ID_MAP con la tabla de standings
-_AS_TO_FD_MAP: dict[int, int] = {}   # {id_apisports: id_football_data}
-
-
-def construir_mapa_as_fd(tabla_fd: dict) -> None:
-    """
-    Cruza _APISPORTS_ID_MAP (nombre→id_as) con tabla_fd (id_fd→{nombre,...})
-    para construir _AS_TO_FD_MAP (id_as→id_fd).
-    Se llama dentro de calcular_elo_equipos cada vez que el mapa esté vacío.
-    """
-    global _AS_TO_FD_MAP
-    if _AS_TO_FD_MAP:
-        return  # ya construido
-
-    mapa = {}
-    for id_fd, info in tabla_fd.items():
-        nombre_fd = info["nombre"].lower()
-        # Buscar en el mapa de api-sports por nombre (mismo match parcial)
-        for nombre_as, id_as in _APISPORTS_ID_MAP.items():
-            if nombre_fd in nombre_as or nombre_as in nombre_fd:
-                mapa[id_as] = id_fd
-                break
-
-    _AS_TO_FD_MAP = mapa
-    logging.info(f"[Elo] Mapa AS→FD construido: {len(_AS_TO_FD_MAP)} equipos enlazados")
-
 
 async def calcular_elo_equipos(tabla: dict) -> dict:
     """
-    Calcula ratings Elo para todos los equipos de LaLiga combinando:
-      1. Partidos históricos de api-sports (temporadas 2022-2024)
-      2. Partidos de la temporada actual de football-data.org (FINISHED)
+    Calcula ratings Elo para todos los equipos de LaLiga usando
+    los partidos FINISHED de la temporada actual (football-data.org).
+    Reutiliza el cache de obtener_partidos_finished() — sin request extra.
     K=32, Elo base=1500. Resultado cacheado 1 hora.
-    Devuelve dict {team_id_football_data: elo_rating}.
+    Devuelve dict {team_id: elo_rating}.
     """
     ahora = datetime.now(timezone.utc)
     if (
@@ -768,32 +601,30 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
         logging.warning("[Elo] Tabla vacía — no se puede calcular Elo.")
         return {}
 
-    # Inicializar Elo base para todos los equipos conocidos en tabla
     elos: dict[int, float] = {tid: 1500.0 for tid in tabla}
     K = 32
 
-    # Asegurar que el mapa AS→FD esté construido
-    construir_mapa_as_fd(tabla)
+    # Reusar cache de partidos FINISHED (no hace request adicional si ya está cacheado)
+    matches = await obtener_partidos_finished()
 
-    # --- FASE 1: historial api-sports 2022-2024 ---
-    partidos_hist = len(_FIXTURES_HISTORICOS)
-    usados_hist = 0
+    if not matches:
+        logging.warning("[Elo] Sin partidos FINISHED disponibles.")
+        _ELO_CACHE["data"] = elos
+        _ELO_CACHE["ts"] = ahora
+        return elos
 
-    for p in _FIXTURES_HISTORICOS:
-        id_as_h = p["homeTeam_id_as"]
-        id_as_a = p["awayTeam_id_as"]
+    matches_ordenados = sorted(matches, key=lambda m: m["utcDate"])
+    usados = 0
 
-        # Convertir ids api-sports → football-data para operar sobre `elos`
-        id_fd_h = _AS_TO_FD_MAP.get(id_as_h)
-        id_fd_a = _AS_TO_FD_MAP.get(id_as_a)
+    for m in matches_ordenados:
+        h_id = m["homeTeam"]["id"]
+        a_id = m["awayTeam"]["id"]
+        winner = m["score"].get("winner")
 
-        if not id_fd_h or not id_fd_a:
+        if not winner or h_id not in elos or a_id not in elos:
             continue
-        if id_fd_h not in elos or id_fd_a not in elos:
-            continue
 
-        winner = p["winner"]
-        elo_h, elo_a = elos[id_fd_h], elos[id_fd_a]
+        elo_h, elo_a = elos[h_id], elos[a_id]
         exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
         exp_a = 1 - exp_h
 
@@ -804,51 +635,13 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
         else:
             s_h, s_a = 0.5, 0.5
 
-        elos[id_fd_h] = elo_h + K * (s_h - exp_h)
-        elos[id_fd_a] = elo_a + K * (s_a - exp_a)
-        usados_hist += 1
-
-    logging.info(f"[Elo] Fase 1 (hist): {usados_hist}/{partidos_hist} partidos procesados")
-
-    # --- FASE 2: temporada actual football-data.org ---
-    try:
-        data = await api_football_call("matches?status=FINISHED")
-        if data and 'matches' in data:
-            matches_actuales = sorted(data['matches'], key=lambda m: m['utcDate'])
-            usados_actual = 0
-
-            for m in matches_actuales:
-                h_id = m['homeTeam']['id']
-                a_id = m['awayTeam']['id']
-                winner = m['score'].get('winner')
-
-                if not winner or h_id not in elos or a_id not in elos:
-                    continue
-
-                elo_h, elo_a = elos[h_id], elos[a_id]
-                exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
-                exp_a = 1 - exp_h
-
-                if winner == 'HOME_TEAM':
-                    s_h, s_a = 1.0, 0.0
-                elif winner == 'AWAY_TEAM':
-                    s_h, s_a = 0.0, 1.0
-                else:
-                    s_h, s_a = 0.5, 0.5
-
-                elos[h_id] = elo_h + K * (s_h - exp_h)
-                elos[a_id] = elo_a + K * (s_a - exp_a)
-                usados_actual += 1
-
-            logging.info(f"[Elo] Fase 2 (actual): {usados_actual} partidos procesados")
-        else:
-            logging.warning("[Elo] Sin partidos de temporada actual — solo historial.")
-    except Exception as e:
-        logging.error(f"[Elo] Error fase 2: {e}")
+        elos[h_id] = elo_h + K * (s_h - exp_h)
+        elos[a_id] = elo_a + K * (s_a - exp_a)
+        usados += 1
 
     _ELO_CACHE["data"] = elos
     _ELO_CACHE["ts"] = ahora
-    logging.info(f"[Elo] ✅ Calculado para {len(elos)} equipos (hist+actual).")
+    logging.info(f"[Elo] ✅ Calculado para {len(elos)} equipos con {usados} partidos (temporada actual).")
     return elos
 
 
@@ -976,9 +769,10 @@ async def handle_pronostico(message):
     l_s, v_s = full_data[liga]['teams'][m_l], full_data[liga]['teams'][m_v]
     id_l = l_s.get("id_api")
     id_v = v_s.get("id_api")
-    logging.info(f"[H2H] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
+    logging.info(f"[Pronostico] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
 
     # Todas las consultas externas EN PARALELO
+    # H2H ahora usa football-data.org (misma fuente, sin api-sports)
     (
         (c_l, c_e, c_v, check_odds),
         (contexto_noticias, penalty_local, penalty_visita),
@@ -991,13 +785,13 @@ async def handle_pronostico(message):
         obtener_datos_mercado(l_q),
         obtener_contexto_real(l_q, v_q),
         obtener_factor_calibracion(),
-        obtener_h2h_apisports(m_l, m_v),
+        obtener_h2h_fd(id_l, id_v, m_l, m_v),
         obtener_forma_reciente(id_l),
         obtener_forma_reciente(id_v),
         obtener_posiciones_tabla()
     )
 
-    # Elo requiere tabla ya calculada, se ejecuta después
+    # Elo: reutiliza cache de partidos FINISHED, no hace request extra
     elos = await calcular_elo_equipos(tabla)
 
     # --- PASO 1: Lambdas base desde Poisson ---
@@ -1250,9 +1044,9 @@ async def handle_pronostico(message):
     p_empate_pct  = prob_poisson_empate_cal * 100
     p_visita_pct  = prob_poisson_visita_cal * 100
 
-    # Indicador de cobertura histórica Elo
-    n_hist = len(_FIXTURES_HISTORICOS)
-    elo_hist_txt = f"{n_hist} partidos hist." if n_hist > 0 else "sin historial"
+    # Número de partidos usados para el Elo
+    n_elo = len([m for m in (_PARTIDOS_FD_CACHE.get("data") or []) if m["score"].get("winner")])
+    elo_src_txt = f"{n_elo} partidos temporada actual"
 
     signals_block = (
         f"\n<b>◆ SEÑALES</b>\n"
@@ -1274,7 +1068,7 @@ async def handle_pronostico(message):
         f"<b>🏠</b> {forma_local_txt}\n"
         f"<b>🚩</b> {forma_visita_txt}\n"
         f"<b>🏆</b> {tabla_texto}\n"
-        f"<b>⚡</b> {elo_texto} <i>({elo_hist_txt})</i>\n"
+        f"<b>⚡</b> {elo_texto} <i>({elo_src_txt})</i>\n"
         f"<b>📰</b>{serper_txt}\n"
         f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {'✅' if check_h2h else '❌'} H2H</b>\n"
     )
@@ -1324,7 +1118,7 @@ PARTIDO: {m_l} vs {m_v}
 • Señal Over/Under: {ou_texto}
 • {empate_aviso}
 
-── HISTORIAL H2H (SEDE-CORREGIDO) ──
+── HISTORIAL H2H (SEDE-CORREGIDO, football-data.org) ──
 • Resultado: {h2h}
 • Victorias local en casa: {home_wins} | Victorias visita fuera: {away_wins} | Total analizados: {total_h2h}
 • Ajuste aplicado: {h2h_ajuste_txt}
@@ -1336,11 +1130,11 @@ PARTIDO: {m_l} vs {m_v}
 ── POSICIÓN EN TABLA ──
 • {tabla_texto}
 
-── ELO DINÁMICO (temporadas 2022-2025) ──
+── ELO DINÁMICO (temporada actual) ──
 • {elo_texto}
 • Factor Elo local: ×{factor_lh_elo:.4f} | Factor Elo visita: ×{factor_la_elo:.4f}
 • Elo local: {elos.get(id_l, 'N/A') if isinstance(elos.get(id_l), str) else f"{elos.get(id_l, 0):.0f}"} pts | Elo visita: {elos.get(id_v, 'N/A') if isinstance(elos.get(id_v), str) else f"{elos.get(id_v, 0):.0f}"} pts
-• Base histórica: {elo_hist_txt}
+• Base: {elo_src_txt}
 
 ── BAJAS Y NOTICIAS (SERPER) ──
 •{serper_txt}
@@ -1382,7 +1176,7 @@ INSTRUCCIONES PARA TU ANÁLISIS:
         prompt_a = (
             f"ERES AUDITOR. Valida este análisis: '{analisis_raw}'\n"
             f"NOTICIAS RECIENTES:\n{contexto_noticias}\n"
-            f"H2H (sede-corregido): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
+            f"H2H (sede-corregido, football-data): {h2h} | Wins local: {home_wins} | Wins visita: {away_wins}\n"
             f"Forma local: {forma_local_txt} (atk ×{forma_local_atk:.3f})\n"
             f"Forma visita: {forma_visita_txt} (atk ×{forma_visita_atk:.3f})\n"
             f"Tabla: {tabla_texto}\n"
@@ -1638,7 +1432,7 @@ async def cmd_help(message):
     help_text = (
         "🤖 <b>SISTEMA V11.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Elo(2022-2025) + Odds + Shin + Kelly.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Elo + Odds + Shin + Kelly.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
@@ -1655,11 +1449,11 @@ async def cmd_help(message):
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    # Arranque paralelo: mapa de IDs + historial Elo
-    await asyncio.gather(
-        construir_mapa_ids_apisports(),
-        construir_historial_elo(),
-    )
+    # Precalentar cache de partidos FINISHED al arrancar
+    # Esto carga los datos para H2H y Elo en un solo request
+    logging.info("[Arranque] Precalentando cache de partidos FINISHED...")
+    await obtener_partidos_finished()
+    logging.info("[Arranque] ✅ Cache lista. Bot en polling.")
     await bot.polling(non_stop=True)
 
 if __name__ == "__main__":
