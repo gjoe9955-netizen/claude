@@ -24,7 +24,7 @@ FOOTBALL_DATA_KEY = os.getenv('FOOTBALL_DATA_API_KEY')
 ODDS_API_KEY = os.getenv('API_KEY_ODDS')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 SERPER_KEY = os.getenv('SERPER_API_KEY')
-# API_SPORTS_KEY se mantiene en .env pero ya no se usa en el flujo principal
+JINA_KEY = os.getenv('JINA_API_KEY')
 
 OFFSET_JUAREZ = -6
 URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
@@ -55,57 +55,94 @@ async def obtener_modelo():
         pass
     return _MODELO_CACHE["data"], False
 
-# --- Función de Búsqueda de Última Hora (Serper) ---
-PALABRAS_BAJA_LOCAL = ["baja", "lesión", "lesionado", "no jugará", "ausente", "descartado", "out"]
+# --- Función de Búsqueda de Última Hora (Serper + Jina) ---
+PALABRAS_BAJA_LOCAL = [
+    "baja", "lesión", "lesionado", "no jugará", "ausente", "descartado", "out",
+    "baja confirmada", "no estará", "se pierde", "fuera de la convocatoria",
+    "no disponible", "sancionado", "suspendido"
+]
 PALABRAS_BAJA_VISITA = PALABRAS_BAJA_LOCAL
+
+
+async def fetch_jina(url: str) -> str:
+    """Lee el contenido completo de una URL via Jina AI."""
+    if not JINA_KEY:
+        return ""
+    try:
+        jina_url = f"https://r.jina.ai/{url}"
+        headers = {
+            "Authorization": f"Bearer {JINA_KEY}",
+            "Accept": "text/plain",
+            "X-Return-Format": "text"
+        }
+        r = await asyncio.to_thread(requests.get, jina_url, headers=headers, timeout=12)
+        if r.status_code == 200:
+            return r.text[:3000]
+    except Exception as e:
+        logging.error(f"Error Jina: {e}")
+    return ""
+
 
 async def obtener_contexto_real(l_q, v_q):
     """
     Devuelve (texto_noticias, factor_penalty_local, factor_penalty_visita).
+    Usa Jina para leer contenido completo de las URLs que devuelve Serper.
     """
     if not SERPER_KEY:
         return "No hay API Key de Serper configurada.", 1.0, 1.0
-    
+
     url = "https://google.serper.dev/search"
     query = f'(site:jornadaperfecta.com OR site:futbolfantasy.com) "{l_q}" "{v_q}" alineación'
-    
+
     payload = json.dumps({
         "q": query,
         "gl": "es",
         "hl": "es",
-        "tbs": "qdr:w" 
+        "tbs": "qdr:w"
     })
     headers = {
         'X-API-KEY': SERPER_KEY,
         'Content-Type': 'application/json'
     }
-    
+
     try:
         r = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=10)
         res = r.json().get('organic', [])
+
+        if not res:
+            return "No se encontraron noticias recientes.", 1.0, 1.0
+
+        # Leer contenido completo de las top 2 URLs con Jina en paralelo
+        urls_top = [item['link'] for item in res[:2] if item.get('link')]
+        contenidos_jina = await asyncio.gather(*[fetch_jina(u) for u in urls_top])
+
         contexto = ""
         penalty_local = 1.0
         penalty_visita = 1.0
 
-        for item in res[:3]:
-            snippet = item.get('snippet', '').lower()
-            titulo = item.get('title', '').lower()
-            texto_completo = snippet + " " + titulo
-            contexto += f"- {item['title']}: {item['snippet']}\n"
+        for i, item in enumerate(res[:3]):
+            snippet = item.get('snippet', '')
+            titulo = item.get('title', '')
 
-            if l_q.lower() in texto_completo:
-                if any(p in texto_completo for p in PALABRAS_BAJA_LOCAL):
-                    penalty_local = 0.95
+            # Si tenemos contenido Jina para este resultado, usarlo en lugar del snippet
+            contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
+            texto_analisis = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
 
-            if v_q.lower() in texto_completo:
-                if any(p in texto_completo for p in PALABRAS_BAJA_VISITA):
-                    penalty_visita = 0.95
+            contexto += f"- {titulo}: {snippet}\n"
+
+            if l_q.lower() in texto_analisis:
+                if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
+                    penalty_local = 0.93
+
+            if v_q.lower() in texto_analisis:
+                if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
+                    penalty_visita = 0.93
 
         contexto_final = contexto if contexto else "No se encontraron noticias recientes."
         return contexto_final, penalty_local, penalty_visita
 
     except Exception as e:
-        logging.error(f"Error Serper: {e}")
+        logging.error(f"Error Serper/Jina: {e}")
         return "Error consultando noticias de última hora.", 1.0, 1.0
 
 # --- Persistencia en GitHub ---
@@ -372,7 +409,6 @@ async def obtener_partidos_finished() -> list:
     except Exception as e:
         logging.error(f"[FD] Error obteniendo partidos FINISHED: {e}")
 
-    # Si falla, devolver cache anterior si existe
     return _PARTIDOS_FD_CACHE["data"] or []
 
 
@@ -393,7 +429,6 @@ async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombr
         if m["homeTeam"]["id"] == id_local and m["awayTeam"]["id"] == id_visita
     ]
 
-    # Completar con los últimos 10 enfrentamientos en cualquier sede si hay pocos
     if len(partidos_sede) < 3:
         partidos_cualquier_sede = [
             m for m in partidos
@@ -402,7 +437,6 @@ async def obtener_h2h_fd(id_local: int, id_visita: int, nombre_local: str, nombr
                 (m["homeTeam"]["id"] == id_visita and m["awayTeam"]["id"] == id_local)
             )
         ]
-        # Ordenar por fecha descendente y tomar los más recientes
         partidos_cualquier_sede.sort(key=lambda m: m["utcDate"], reverse=True)
         partidos_sede = partidos_cualquier_sede[:10]
         modo_sede = False
@@ -609,7 +643,6 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
     elos: dict[int, float] = {tid: 1500.0 for tid in tabla}
     K = 32
 
-    # Reusar cache de partidos FINISHED (no hace request adicional si ya está cacheado)
     matches = await obtener_partidos_finished()
 
     if not matches:
@@ -758,7 +791,7 @@ async def handle_pronostico(message):
         await bot.reply_to(message, "⚠️ `/pronostico Local vs Visitante`."); return
 
     l_q, v_q = [t.strip() for t in parts[1].split(" vs ")]
-    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V11 (Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin)...")
+    msg_espera = await bot.reply_to(message, "📡 Ejecutando Análisis V11 (Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin+Jina)...")
 
     full_data, check_json = await obtener_modelo()
     if not full_data:
@@ -776,8 +809,6 @@ async def handle_pronostico(message):
     id_v = v_s.get("id_api")
     logging.info(f"[Pronostico] id_l={id_l} | id_v={id_v} | equipo_l={m_l} | equipo_v={m_v}")
 
-    # Todas las consultas externas EN PARALELO
-    # H2H ahora usa football-data.org (misma fuente, sin api-sports)
     (
         (c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v),
         (contexto_noticias, penalty_local, penalty_visita),
@@ -796,7 +827,6 @@ async def handle_pronostico(message):
         obtener_posiciones_tabla()
     )
 
-    # Elo: reutiliza cache de partidos FINISHED, no hace request extra
     elos = await calcular_elo_equipos(tabla)
 
     # --- PASO 1: Lambdas base desde Poisson ---
@@ -1056,7 +1086,6 @@ async def handle_pronostico(message):
     p_empate_pct  = prob_poisson_empate_cal * 100
     p_visita_pct  = prob_poisson_visita_cal * 100
 
-    # Número de partidos usados para el Elo
     n_elo = len([m for m in (_PARTIDOS_FD_CACHE.get("data") or []) if m["score"].get("winner")])
     elo_src_txt = f"{n_elo} partidos temporada actual"
 
@@ -1153,7 +1182,7 @@ PARTIDO: {m_l} vs {m_v}
 • Elo local: {elos.get(id_l, 'N/A') if isinstance(elos.get(id_l), str) else f"{elos.get(id_l, 0):.0f}"} pts | Elo visita: {elos.get(id_v, 'N/A') if isinstance(elos.get(id_v), str) else f"{elos.get(id_v, 0):.0f}"} pts
 • Base: {elo_src_txt}
 
-── BAJAS Y NOTICIAS (SERPER) ──
+── BAJAS Y NOTICIAS (SERPER + JINA) ──
 •{serper_txt}
 • Factor penalización local: ×{penalty_local:.2f} | Factor penalización visita: ×{penalty_visita:.2f}
 
@@ -1466,8 +1495,6 @@ async def cmd_help(message):
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    # Precalentar cache de partidos FINISHED al arrancar
-    # Esto carga los datos para H2H y Elo en un solo request
     logging.info("[Arranque] Precalentando cache de partidos FINISHED...")
     await obtener_partidos_finished()
     logging.info("[Arranque] ✅ Cache lista. Bot en polling.")
