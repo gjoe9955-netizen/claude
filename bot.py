@@ -29,7 +29,11 @@ API_SPORTS_KEY = os.getenv('API_SPORTS_KEY')
 # --- Cache mapeo nombre → id de api-sports (se construye al arrancar) ---
 _APISPORTS_ID_MAP = {}  # {"Girona FC": 547, ...}
 LALIGA_ID = 140
-LALIGA_SEASON = 2025
+LALIGA_SEASON = 2024  # FIX: plan free solo soporta 2022-2024
+
+# --- Cache fixtures históricos api-sports (temporadas 2022-2024) ---
+_FIXTURES_HISTORICOS = []   # lista de partidos ordenados cronológicamente
+_FIXTURES_HIST_TS   = None  # timestamp de última carga
 
 OFFSET_JUAREZ = -6
 URL_JSON = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
@@ -118,17 +122,15 @@ async def guardar_en_github(nuevo_registro=None, historial_completo=None):
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     try:
-        # GET para obtener SHA actual del archivo
         r_get = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
         r_get_json = r_get.json()
 
         if r_get.status_code == 200:
             sha = r_get_json.get('sha')
             contenido_raw = r_get_json.get('content', '')
-            # La API de GitHub devuelve el contenido con saltos de línea embebidos
             historial_actual = json.loads(base64.b64decode(contenido_raw.replace('\n', '')).decode('utf-8'))
         elif r_get.status_code == 404:
-            sha = None          # Archivo nuevo: no se necesita SHA
+            sha = None
             historial_actual = []
         else:
             logging.error(f"GitHub GET falló: {r_get.status_code} — {r_get_json}")
@@ -149,7 +151,6 @@ async def guardar_en_github(nuevo_registro=None, historial_completo=None):
             "message": "🤖 Actualización de Historial",
             "content": nuevo_contenido,
         }
-        # SHA es obligatorio si el archivo ya existe; omitirlo si es nuevo
         if sha:
             payload["sha"] = sha
 
@@ -218,12 +219,11 @@ async def obtener_datos_mercado(equipo_l):
     """
     if not ODDS_API_KEY: return 1.85, 3.50, 4.00, False
 
-    # Casas preferidas por eficiencia de mercado (menor overround)
     CASAS_PREFERIDAS = {
         "pinnacle", "betfair", "bet365", "williamhill",
         "unibet", "bwin", "betway", "marathonbet"
     }
-    MAX_CASAS = 6  # máximo de casas a promediar
+    MAX_CASAS = 6
 
     try:
         url = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
@@ -238,7 +238,6 @@ async def obtener_datos_mercado(equipo_l):
             if not (query in home or home in query):
                 continue
 
-            # Recopilar cuotas por casa, ordenando preferidas primero
             bookmakers = match.get('bookmakers', [])
             bookmakers_ordenados = sorted(
                 bookmakers,
@@ -264,7 +263,6 @@ async def obtener_datos_mercado(equipo_l):
             if not ol_list:
                 return 1.85, 3.50, 4.00, False
 
-            # Promedio simple de las casas disponibles
             ol_consenso = round(sum(ol_list) / len(ol_list), 3)
             oe_consenso = round(sum(oe_list) / len(oe_list), 3)
             ov_consenso = round(sum(ov_list) / len(ov_list), 3)
@@ -396,27 +394,130 @@ def resolver_id_apisports(nombre_equipo: str) -> int | None:
     Intenta match exacto primero, luego parcial.
     """
     nombre_lower = nombre_equipo.lower()
-    # Match exacto
     if nombre_lower in _APISPORTS_ID_MAP:
         return _APISPORTS_ID_MAP[nombre_lower]
-    # Match parcial
     for key, id_as in _APISPORTS_ID_MAP.items():
         if nombre_lower in key or key in nombre_lower:
             return id_as
     return None
 
 
+# ============================================================
+# Fixtures históricos api-sports (2022-2024) para Elo
+# ============================================================
+
+async def descargar_fixtures_apisports(season: int) -> list:
+    """
+    Descarga todos los partidos FINISHED de LaLiga para una temporada dada
+    desde api-sports. Devuelve lista de dicts normalizados con las mismas
+    claves que usan los fixtures de football-data.org para el Elo:
+      {utcDate, homeTeam_id_as, awayTeam_id_as, winner}
+    Retorna lista vacía si hay error o plan no lo permite.
+    """
+    if not API_SPORTS_KEY:
+        return []
+
+    url = "https://v3.football.api-sports.io/fixtures"
+    headers = {"x-apisports-key": API_SPORTS_KEY}
+    params = {
+        "league": LALIGA_ID,
+        "season": season,
+        "status": "FT"   # Full Time = finalizado
+    }
+
+    try:
+        r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=15)
+        logging.info(f"[API-Sports] GET /fixtures season={season} status={r.status_code}")
+
+        if r.status_code != 200:
+            logging.error(f"[API-Sports] fixtures season={season} HTTP {r.status_code}")
+            return []
+
+        data = r.json()
+        errores = data.get("errors", {})
+        if errores:
+            logging.error(f"[API-Sports] fixtures season={season} errores: {errores}")
+            return []
+
+        partidos_raw = data.get("response", [])
+        partidos = []
+
+        for p in partidos_raw:
+            fecha = p["fixture"]["date"]           # ISO 8601
+            home_id = p["teams"]["home"]["id"]     # id api-sports
+            away_id = p["teams"]["away"]["id"]
+            goles_h = p["goals"]["home"]
+            goles_a = p["goals"]["away"]
+
+            if goles_h is None or goles_a is None:
+                continue
+
+            if goles_h > goles_a:
+                winner = "HOME_TEAM"
+            elif goles_a > goles_h:
+                winner = "AWAY_TEAM"
+            else:
+                winner = "DRAW"
+
+            partidos.append({
+                "utcDate":       fecha,
+                "homeTeam_id_as": home_id,
+                "awayTeam_id_as": away_id,
+                "winner":        winner,
+                "source":        "apisports"
+            })
+
+        logging.info(f"[API-Sports] ✅ season={season}: {len(partidos)} partidos descargados")
+        return partidos
+
+    except Exception as e:
+        logging.error(f"[API-Sports] Excepción fixtures season={season}: {e}", exc_info=True)
+        return []
+
+
+async def construir_historial_elo():
+    """
+    Descarga fixtures de las temporadas 2022, 2023 y 2024 desde api-sports
+    y los guarda en _FIXTURES_HISTORICOS ordenados cronológicamente.
+    Se llama una vez al arrancar. TTL: no se refresca (son temporadas cerradas).
+    """
+    global _FIXTURES_HISTORICOS, _FIXTURES_HIST_TS
+
+    if _FIXTURES_HISTORICOS:
+        logging.info("[Elo-Hist] Ya cargado, omitiendo.")
+        return
+
+    logging.info("[Elo-Hist] Descargando historial api-sports (2022-2024)...")
+
+    # Descargar las 3 temporadas en paralelo
+    resultados = await asyncio.gather(
+        descargar_fixtures_apisports(2022),
+        descargar_fixtures_apisports(2023),
+        descargar_fixtures_apisports(2024),
+    )
+
+    todos = []
+    for lista in resultados:
+        todos.extend(lista)
+
+    # Ordenar cronológicamente para que el Elo se calcule en secuencia correcta
+    todos.sort(key=lambda p: p["utcDate"])
+
+    _FIXTURES_HISTORICOS = todos
+    _FIXTURES_HIST_TS = datetime.now(timezone.utc)
+
+    logging.info(f"[Elo-Hist] ✅ Total partidos históricos: {len(_FIXTURES_HISTORICOS)} (2022-2024)")
+
+
 # --- H2H con api-sports (sede-corregido) ---
 async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
     """
     Obtiene H2H desde api-sports filtrando solo partidos jugados
-    en casa del equipo local actual. Devuelve misma firma que
-    obtener_h2h_directo para compatibilidad total.
+    en casa del equipo local actual.
     """
     if not API_SPORTS_KEY:
         return "H2H: Sin API-Sports key.", False, 0, 0, 0
 
-    # Si el mapa está vacío (fallo al arrancar), reintentarlo ahora
     if not _APISPORTS_ID_MAP:
         logging.warning("[H2H] Mapa vacío, reintentando construcción...")
         await construir_mapa_ids_apisports()
@@ -430,7 +531,7 @@ async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
 
     url = "https://v3.football.api-sports.io/fixtures/headtohead"
     headers = {"x-apisports-key": API_SPORTS_KEY}
-    params = {"h2h": f"{id_l}-{id_v}", "last": 20}  # últimos 20 para tener suficientes en casa
+    params = {"h2h": f"{id_l}-{id_v}", "last": 20}
 
     try:
         r = await asyncio.to_thread(requests.get, url, headers=headers, params=params, timeout=10)
@@ -441,11 +542,10 @@ async def obtener_h2h_apisports(nombre_local: str, nombre_visita: str):
         if not partidos:
             return "H2H: Sin partidos registrados.", False, 0, 0, 0
 
-        # Filtrar solo partidos donde id_l fue local (sede correcta)
         partidos_en_casa = [
             p for p in partidos
             if p["teams"]["home"]["id"] == id_l
-        ][:10]  # últimos 10 en casa del local
+        ][:10]
 
         if not partidos_en_casa:
             return "H2H: Sin partidos en esta sede.", False, 0, 0, 0
@@ -614,19 +714,48 @@ def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
     return 1.0
 
 
-
 # ============================================================
-# Elo Dinámico — calculado desde historial de partidos de la API
+# Elo Dinámico — temporada actual (football-data.org) +
+#               historial 2022-2024 (api-sports)
 # ============================================================
 _ELO_CACHE = {"data": None, "ts": None}
 ELO_CACHE_TTL = 3600  # 1 hora
 
+# Tabla de conversión: id api-sports → id football-data.org
+# Se construye dinámicamente cruzando _APISPORTS_ID_MAP con la tabla de standings
+_AS_TO_FD_MAP: dict[int, int] = {}   # {id_apisports: id_football_data}
+
+
+def construir_mapa_as_fd(tabla_fd: dict) -> None:
+    """
+    Cruza _APISPORTS_ID_MAP (nombre→id_as) con tabla_fd (id_fd→{nombre,...})
+    para construir _AS_TO_FD_MAP (id_as→id_fd).
+    Se llama dentro de calcular_elo_equipos cada vez que el mapa esté vacío.
+    """
+    global _AS_TO_FD_MAP
+    if _AS_TO_FD_MAP:
+        return  # ya construido
+
+    mapa = {}
+    for id_fd, info in tabla_fd.items():
+        nombre_fd = info["nombre"].lower()
+        # Buscar en el mapa de api-sports por nombre (mismo match parcial)
+        for nombre_as, id_as in _APISPORTS_ID_MAP.items():
+            if nombre_fd in nombre_as or nombre_as in nombre_fd:
+                mapa[id_as] = id_fd
+                break
+
+    _AS_TO_FD_MAP = mapa
+    logging.info(f"[Elo] Mapa AS→FD construido: {len(_AS_TO_FD_MAP)} equipos enlazados")
+
+
 async def calcular_elo_equipos(tabla: dict) -> dict:
     """
-    Calcula ratings Elo para todos los equipos de LaLiga usando
-    los partidos FINISHED de la temporada actual.
+    Calcula ratings Elo para todos los equipos de LaLiga combinando:
+      1. Partidos históricos de api-sports (temporadas 2022-2024)
+      2. Partidos de la temporada actual de football-data.org (FINISHED)
     K=32, Elo base=1500. Resultado cacheado 1 hora.
-    Devuelve dict {team_id: elo_rating}.
+    Devuelve dict {team_id_football_data: elo_rating}.
     """
     ahora = datetime.now(timezone.utc)
     if (
@@ -635,50 +764,92 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
     ):
         return _ELO_CACHE["data"]
 
+    if not tabla:
+        logging.warning("[Elo] Tabla vacía — no se puede calcular Elo.")
+        return {}
+
+    # Inicializar Elo base para todos los equipos conocidos en tabla
+    elos: dict[int, float] = {tid: 1500.0 for tid in tabla}
+    K = 32
+
+    # Asegurar que el mapa AS→FD esté construido
+    construir_mapa_as_fd(tabla)
+
+    # --- FASE 1: historial api-sports 2022-2024 ---
+    partidos_hist = len(_FIXTURES_HISTORICOS)
+    usados_hist = 0
+
+    for p in _FIXTURES_HISTORICOS:
+        id_as_h = p["homeTeam_id_as"]
+        id_as_a = p["awayTeam_id_as"]
+
+        # Convertir ids api-sports → football-data para operar sobre `elos`
+        id_fd_h = _AS_TO_FD_MAP.get(id_as_h)
+        id_fd_a = _AS_TO_FD_MAP.get(id_as_a)
+
+        if not id_fd_h or not id_fd_a:
+            continue
+        if id_fd_h not in elos or id_fd_a not in elos:
+            continue
+
+        winner = p["winner"]
+        elo_h, elo_a = elos[id_fd_h], elos[id_fd_a]
+        exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
+        exp_a = 1 - exp_h
+
+        if winner == "HOME_TEAM":
+            s_h, s_a = 1.0, 0.0
+        elif winner == "AWAY_TEAM":
+            s_h, s_a = 0.0, 1.0
+        else:
+            s_h, s_a = 0.5, 0.5
+
+        elos[id_fd_h] = elo_h + K * (s_h - exp_h)
+        elos[id_fd_a] = elo_a + K * (s_a - exp_a)
+        usados_hist += 1
+
+    logging.info(f"[Elo] Fase 1 (hist): {usados_hist}/{partidos_hist} partidos procesados")
+
+    # --- FASE 2: temporada actual football-data.org ---
     try:
         data = await api_football_call("matches?status=FINISHED")
-        if not data or 'matches' not in data:
-            return {}
+        if data and 'matches' in data:
+            matches_actuales = sorted(data['matches'], key=lambda m: m['utcDate'])
+            usados_actual = 0
 
-        matches = sorted(data['matches'], key=lambda m: m['utcDate'])
+            for m in matches_actuales:
+                h_id = m['homeTeam']['id']
+                a_id = m['awayTeam']['id']
+                winner = m['score'].get('winner')
 
-        # Inicializar Elo base para todos los equipos conocidos en tabla
-        elos = {tid: 1500.0 for tid in tabla}
-        K = 32
+                if not winner or h_id not in elos or a_id not in elos:
+                    continue
 
-        for m in matches:
-            h_id = m['homeTeam']['id']
-            a_id = m['awayTeam']['id']
-            winner = m['score'].get('winner')
-            if not winner or h_id not in elos or a_id not in elos:
-                continue
+                elo_h, elo_a = elos[h_id], elos[a_id]
+                exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
+                exp_a = 1 - exp_h
 
-            elo_h = elos[h_id]
-            elo_a = elos[a_id]
+                if winner == 'HOME_TEAM':
+                    s_h, s_a = 1.0, 0.0
+                elif winner == 'AWAY_TEAM':
+                    s_h, s_a = 0.0, 1.0
+                else:
+                    s_h, s_a = 0.5, 0.5
 
-            # Probabilidad esperada Elo
-            exp_h = 1 / (1 + 10 ** ((elo_a - elo_h) / 400))
-            exp_a = 1 - exp_h
+                elos[h_id] = elo_h + K * (s_h - exp_h)
+                elos[a_id] = elo_a + K * (s_a - exp_a)
+                usados_actual += 1
 
-            # Resultado real
-            if winner == 'HOME_TEAM':
-                s_h, s_a = 1.0, 0.0
-            elif winner == 'AWAY_TEAM':
-                s_h, s_a = 0.0, 1.0
-            else:  # DRAW
-                s_h, s_a = 0.5, 0.5
-
-            elos[h_id] = elo_h + K * (s_h - exp_h)
-            elos[a_id] = elo_a + K * (s_a - exp_a)
-
-        _ELO_CACHE["data"] = elos
-        _ELO_CACHE["ts"] = ahora
-        logging.info(f"[Elo] Calculado para {len(elos)} equipos.")
-        return elos
-
+            logging.info(f"[Elo] Fase 2 (actual): {usados_actual} partidos procesados")
+        else:
+            logging.warning("[Elo] Sin partidos de temporada actual — solo historial.")
     except Exception as e:
-        logging.error(f"[Elo] Error: {e}")
-        return {}
+        logging.error(f"[Elo] Error fase 2: {e}")
+
+    _ELO_CACHE["data"] = elos
+    _ELO_CACHE["ts"] = ahora
+    logging.info(f"[Elo] ✅ Calculado para {len(elos)} equipos (hist+actual).")
+    return elos
 
 
 def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
@@ -708,13 +879,7 @@ def calcular_factor_elo(elo_local: float, elo_visita: float) -> tuple:
 
 def calcular_shin(odds_l, odds_e, odds_v):
     """
-    Método Shin (1993): estima probabilidades verdaderas desde cuotas
-    modelando el porcentaje de apostadores con información privilegiada (z).
-    
-    - z cercano a 0: mercado eficiente, poca info privilegiada
-    - z cercano a 0.05+: mercado con insiders activos (más distorsión en cuotas altas)
-    
-    Devuelve (prob_l, prob_e, prob_v, z)
+    Método Shin (1993): estima probabilidades verdaderas desde cuotas.
     """
     p_raw = [1 / odds_l, 1 / odds_e, 1 / odds_v]
     n = len(p_raw)
@@ -727,7 +892,7 @@ def calcular_shin(odds_l, odds_e, odds_v):
         p_shin_nuevo = []
         for p in p_raw:
             discriminante = z ** 2 + 4 * (1 - z) * (p / overround)
-            discriminante = max(discriminante, 0.0)  # evitar raíz de negativo
+            discriminante = max(discriminante, 0.0)
             denom_shin = 2 * (1 - z)
             if denom_shin == 0:
                 p_shin_nuevo.append(p / overround)
@@ -740,24 +905,19 @@ def calcular_shin(odds_l, odds_e, odds_v):
         if denominador == 0:
             break
         z_nuevo = (suma - 1) / denominador
-        z_nuevo = max(0.0, min(z_nuevo, 0.15))  # clamp: z ∈ [0, 0.15]
+        z_nuevo = max(0.0, min(z_nuevo, 0.15))
         if abs(z_nuevo - z) < 1e-9:
             p_shin = p_shin_nuevo
             break
         z = z_nuevo
         p_shin = p_shin_nuevo
 
-    # Normalizar para garantizar suma = 1
     total = sum(p_shin)
     p_shin = [p / total for p in p_shin]
     return p_shin[0], p_shin[1], p_shin[2], z
 
 
 def interpretar_shin(divergencia, z):
-    """
-    Interpreta la divergencia entre Shin y normalización simple.
-    Devuelve (texto_confianza, factor_shin) que penaliza el edge si divergen.
-    """
     if divergencia < 0.02:
         confianza = "✅ Alta (Shin≈Simple, señal sólida)"
         factor = 1.0
@@ -789,7 +949,7 @@ def evaluar_resultado(pick, partido, home_name, away_name, winner):
         return "✅ WIN"
     return "❌ LOSS"
 
-# --- Comando Principal: Pronóstico V10 ---
+# --- Comando Principal: Pronóstico V11 ---
 @bot.message_handler(commands=['pronostico', 'valor'])
 async def handle_pronostico(message):
     if not SISTEMA_IA["estratega"]["nodo"]:
@@ -883,19 +1043,15 @@ async def handle_pronostico(message):
 
     # --- PASO 8: Normalización simple + Shin (validación cruzada) ---
     overround = (1 / c_l) + (1 / c_e) + (1 / c_v)
-    prob_market_simple = (1 / c_l) / overround  # normalización simple
+    prob_market_simple = (1 / c_l) / overround
 
-    # Shin: redistribuye considerando info privilegiada en el mercado
     shin_l, shin_e, shin_v, shin_z = calcular_shin(c_l, c_e, c_v)
 
-    # Divergencia entre métodos → señal de confianza
     divergencia_shin = abs(shin_l - prob_market_simple)
     shin_confianza, shin_factor, shin_z_txt = interpretar_shin(divergencia_shin, shin_z)
 
-    # Prob mercado final = promedio de ambos métodos
     prob_market = (prob_market_simple + shin_l) / 2
 
-    # Mezcla final: Poisson(90%) + Mercado promedio(10%)
     p_win = (prob_poisson_calibrado * 0.90) + (prob_market * 0.10)
     p_percent = p_win * 100
 
@@ -917,38 +1073,30 @@ async def handle_pronostico(message):
     prob_poisson_empate_cal        = prob_poisson_empate * factor_calibracion
     prob_poisson_visita_cal        = prob_poisson_visita * factor_calibracion
 
-    # Sobrescribir p_win con la versión nombrada correctamente
     p_win = prob_poisson_calibrado_local
 
-    prob_market_l = (prob_market_simple + shin_l) / 2   # ya calculado antes como prob_market
+    prob_market_l = (prob_market_simple + shin_l) / 2
     prob_market_e = (shin_e + (1/c_e)/overround) / 2
     prob_market_v = (shin_v + (1/c_v)/overround) / 2
 
     margen_error = 0.005
 
-    # --- Edge bruto para los 3 resultados ---
     edge_local_raw  = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
     edge_empate     = (prob_poisson_empate_cal - prob_market_e - margen_error) * shin_factor
     edge_visita     = (prob_poisson_visita_cal - prob_market_v - margen_error) * shin_factor
 
-    # --- Filtros adicionales sobre edge local ---
     edge_ajustado = edge_local_raw
-    # Filtro cuotas trampa en mercado equilibrado
     if 1.90 <= c_l <= 2.10 and edge_ajustado < 0.02:
         edge_ajustado = -0.001
-    # Penalización si cuota de empate es muy baja (partido abierto)
     if c_e < 3.0 and edge_ajustado > 0:
         edge_ajustado *= 0.80
         empate_aviso = f"⚠️ Cuota empate baja ({c_e:.2f}) → edge local reducido 20%"
     else:
         empate_aviso = f"Cuota empate: {c_e:.2f} ✅"
 
-    # --- Filtros equivalentes para visitante ---
     if 1.90 <= c_v <= 2.10 and edge_visita < 0.02:
         edge_visita = -0.001
-    # No aplicar penalización c_e < 3.0 al visitante: ese filtro es solo para el local
 
-    # --- Selección del pick principal: el resultado con mayor edge positivo ---
     candidatos = []
     if edge_ajustado > 0:
         candidatos.append(("local",   edge_ajustado, c_l, m_l,     prob_poisson_calibrado_local * 100))
@@ -965,7 +1113,6 @@ async def handle_pronostico(message):
     pick_riesgo_cuota  = 0
 
     if candidatos:
-        # Ordenar por edge descendente; el primero es el pick principal
         candidatos.sort(key=lambda c: c[1], reverse=True)
         tipo_pick, edge_principal, cuota_pick, nombre_pick, prob_pick_pct = candidatos[0]
 
@@ -986,7 +1133,6 @@ async def handle_pronostico(message):
         else:
             nivel = "DIAMANTE 💎"
 
-        # Si hay un segundo candidato, mostrarlo como pick de riesgo
         if len(candidatos) > 1:
             _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
             kelly_riesgo  = (edge_riesgo / (pick_riesgo_cuota - 1)) * 0.25
@@ -998,7 +1144,6 @@ async def handle_pronostico(message):
             else:
                 nivel_riesgo = "RIESGO ALTO 🔴"
     else:
-        # Sin valor en ningún resultado
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
         ou_factor  = 1.0
         tipo_pick  = "ninguno"
@@ -1033,13 +1178,11 @@ async def handle_pronostico(message):
     clave_partido = f"{m_l}_vs_{m_v}_{fecha_hoy[:10]}"
     ahora = datetime.now(timezone.utc)
 
-    # Cooldown en RAM (evita duplicados en la misma sesión)
     ya_en_ram = (
         clave_partido in COOLDOWN and
         (ahora - COOLDOWN[clave_partido]).total_seconds() < COOLDOWN_MINUTOS * 60
     )
 
-    # Cooldown persistente: verificar si ya existe en GitHub
     async def ya_en_github():
         try:
             url_hist = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/main/{FILE_PATH}"
@@ -1074,7 +1217,6 @@ async def handle_pronostico(message):
     if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
     if not serper_txt: serper_txt = " Sin bajas detectadas"
 
-    # Bloque de decisión: lo primero que ve el usuario
     tipo_emoji = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
     if pick_final == "No Bet":
         if pick_riesgo_nombre:
@@ -1104,12 +1246,14 @@ async def handle_pronostico(message):
             f"<b>╚{'═'*22}╝</b>\n"
         )
 
-    # Porcentajes Poisson para el bloque de señales
     p_local_pct   = prob_poisson_calibrado_local * 100
     p_empate_pct  = prob_poisson_empate_cal * 100
     p_visita_pct  = prob_poisson_visita_cal * 100
 
-    # Bloque de señales técnicas compacto
+    # Indicador de cobertura histórica Elo
+    n_hist = len(_FIXTURES_HISTORICOS)
+    elo_hist_txt = f"{n_hist} partidos hist." if n_hist > 0 else "sin historial"
+
     signals_block = (
         f"\n<b>◆ SEÑALES</b>\n"
         f"<code>"
@@ -1124,23 +1268,19 @@ async def handle_pronostico(message):
         f"</code>\n"
     )
 
-    # Bloque de contexto deportivo
     context_block = (
         f"\n<b>◆ CONTEXTO</b>\n"
         f"<b>H2H</b> {h2h_texto} → {h2h_ajuste_txt}\n"
         f"<b>🏠</b> {forma_local_txt}\n"
         f"<b>🚩</b> {forma_visita_txt}\n"
         f"<b>🏆</b> {tabla_texto}\n"
-        f"<b>⚡</b> {elo_texto}\n"
+        f"<b>⚡</b> {elo_texto} <i>({elo_hist_txt})</i>\n"
         f"<b>📰</b>{serper_txt}\n"
         f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {'✅' if check_h2h else '❌'} H2H</b>\n"
     )
 
     header = decision_block + signals_block + context_block
 
-    # ============================================================
-    # PROMPT ESTRATEGA — Todos los datos disponibles
-    # ============================================================
     prompt_e = f"""
 Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en alguno de los tres resultados posibles del partido.
 
@@ -1196,10 +1336,11 @@ PARTIDO: {m_l} vs {m_v}
 ── POSICIÓN EN TABLA ──
 • {tabla_texto}
 
-── ELO DINÁMICO (temporada actual) ──
+── ELO DINÁMICO (temporadas 2022-2025) ──
 • {elo_texto}
 • Factor Elo local: ×{factor_lh_elo:.4f} | Factor Elo visita: ×{factor_la_elo:.4f}
-• Elo local: {elos.get(id_l, 'N/A'):.0f} pts | Elo visita: {elos.get(id_v, 'N/A'):.0f} pts
+• Elo local: {elos.get(id_l, 'N/A') if isinstance(elos.get(id_l), str) else f"{elos.get(id_l, 0):.0f}"} pts | Elo visita: {elos.get(id_v, 'N/A') if isinstance(elos.get(id_v), str) else f"{elos.get(id_v, 0):.0f}"} pts
+• Base histórica: {elo_hist_txt}
 
 ── BAJAS Y NOTICIAS (SERPER) ──
 •{serper_txt}
@@ -1374,13 +1515,12 @@ async def cmd_validar(message):
             for m in data_api['matches']:
                 h_api = m['homeTeam']['name'].lower()
                 a_api = m['awayTeam']['name'].lower()
-                # Match parcial: busca si el nombre del equipo está contenido
                 local_match = any(p in h_api or h_api in p for p in partido_lower.split(" vs ")[0:1])
                 visita_match = any(p in a_api or a_api in p for p in partido_lower.split(" vs ")[1:2])
                 if local_match and visita_match:
                     winner = m['score'].get('winner')
                     if not winner:
-                        continue  # partido sin resultado aún
+                        continue
                     item['status'] = evaluar_resultado(
                         item['pick'], item['partido'], h_api, a_api, winner
                     )
@@ -1388,7 +1528,7 @@ async def cmd_validar(message):
                         f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
                     )
                     count += 1
-                    break  # evitar doble match
+                    break
 
         if count > 0:
             await guardar_en_github(historial_completo=historial_raw)
@@ -1496,9 +1636,9 @@ async def cb_fin(call):
 @bot.message_handler(commands=['help'])
 async def cmd_help(message):
     help_text = (
-        "🤖 <b>SISTEMA V10.0 PRO</b>\n\n"
+        "🤖 <b>SISTEMA V11.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Odds + Shin + Kelly.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson 7x7 + Dixon-Coles + H2H-Sede + Forma + Tabla + Elo(2022-2025) + Odds + Shin + Kelly.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
         "• <code>/validar</code>: Sincroniza resultados GitHub.\n"
@@ -1513,10 +1653,14 @@ async def cmd_help(message):
     )
     await bot.reply_to(message, help_text, parse_mode='HTML')
 
-async def main(): 
+async def main():
     await bot.delete_webhook(drop_pending_updates=True)
-    await construir_mapa_ids_apisports()
+    # Arranque paralelo: mapa de IDs + historial Elo
+    await asyncio.gather(
+        construir_mapa_ids_apisports(),
+        construir_historial_elo(),
+    )
     await bot.polling(non_stop=True)
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     asyncio.run(main())
