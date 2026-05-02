@@ -1378,7 +1378,7 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
     else:
         auditor_block = ""
 
-    footer = f"\n\n<i>{'—'*18}\nV12 · {nodos_txt} · ⚙️ gjoe9955</i>"
+    footer = f"\n\n<i>{'—'*18}\nV12 · {nodos_txt} · ⚙️ Gwero 👷‍♂️</i>"
     final  = f"{header}{analisis}{auditor_block}{footer}"
 
     await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode='HTML')
