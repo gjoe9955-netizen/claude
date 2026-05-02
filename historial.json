@@ -12,5 +12,18 @@
         "stake_riesgo": "0.25%",
         "status": "✅ WIN",
         "marcador_real": "0-2"
+    },
+    {
+        "fecha": "2026-05-02 13:00",
+        "partido": "CA Osasuna vs FC Barcelona",
+        "pick": "FC Barcelona",
+        "poisson": "66.0%",
+        "cuota": 1.663,
+        "edge": "9.3%",
+        "stake": "2.95%",
+        "nivel": "DIAMANTE 💎",
+        "pick_riesgo": "Sin valor alternativo",
+        "stake_riesgo": "0%",
+        "status": "⏳ PENDIENTE"
     }
 ]
