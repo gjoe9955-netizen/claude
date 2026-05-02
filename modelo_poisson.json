@@ -1,170 +1,285 @@
 {
     "LaLiga": {
         "averages": {
-            "league_home": 1.6704452298718722,
-            "league_away": 1.1882760427577521
+            "league_home": 1.6654734250076308,
+            "league_away": 1.1939954836386695
         },
         "teams": {
             "Girona FC": {
                 "id_api": 298,
-                "att_h": 0.8256915393895375,
-                "def_h": 1.2392326290096207,
-                "att_a": 0.9176858285061026,
-                "def_a": 0.9426950033134817
+                "att_h": 0.8279318439103799,
+                "def_h": 1.2332591338253562,
+                "att_a": 0.9137841254556976,
+                "def_a": 0.9454075204669141,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Rayo Vallecano de Madrid": {
                 "id_api": 87,
-                "att_h": 1.0121249500866958,
-                "def_h": 0.8631971590948752,
-                "att_a": 0.8541007339881503,
-                "def_a": 1.1005395138935474
+                "att_h": 1.0153959892098385,
+                "def_h": 0.8588961301093094,
+                "att_a": 0.8500461369761237,
+                "def_a": 1.103518970120917,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Villarreal CF": {
                 "id_api": 94,
-                "att_h": 1.4916764177840103,
-                "def_h": 1.0286288691069718,
-                "att_a": 1.103084062876935,
-                "def_a": 0.8042467620899726
+                "att_h": 1.496391075390009,
+                "def_h": 1.0239068117010506,
+                "att_a": 1.097591573932641,
+                "def_a": 0.8066006396719534,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Real Oviedo": {
                 "id_api": 1048,
-                "att_h": 0.4014184602229317,
-                "def_h": 0.7578198361305559,
-                "att_a": 1.1021723243184418,
-                "def_a": 1.2972698378122944
+                "att_h": 0.4024338493588812,
+                "def_h": 0.7537386079462615,
+                "att_a": 1.0967660487405446,
+                "def_a": 1.3006336117859336,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "RCD Mallorca": {
                 "id_api": 89,
-                "att_h": 1.0182062836103003,
-                "def_h": 1.0777221174124063,
-                "att_a": 0.6966324479113445,
-                "def_a": 1.1143361091118773
+                "att_h": 1.021045833450295,
+                "def_h": 1.0726037748364086,
+                "att_a": 0.6929126511760029,
+                "def_a": 1.1173966174660914,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "FC Barcelona": {
                 "id_api": 81,
-                "att_h": 1.702492668522502,
-                "def_h": 0.720572668411912,
-                "att_a": 2.1122095572350945,
-                "def_a": 0.7876726390214872
+                "att_h": 1.708076074290299,
+                "def_h": 0.7166390904293337,
+                "att_a": 2.1025491320359597,
+                "def_a": 0.7902797085916627,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Deportivo Alavés": {
                 "id_api": 263,
-                "att_h": 0.8516797261535446,
-                "def_h": 1.0093292302459702,
-                "att_a": 1.071524478947538,
-                "def_a": 1.0350260481430142
+                "att_h": 0.8544058655661869,
+                "def_h": 1.0042354569605711,
+                "att_a": 1.0664059693852646,
+                "def_a": 1.0381899495975606,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Levante UD": {
                 "id_api": 88,
-                "att_h": 0.8032625725163168,
-                "def_h": 0.9581442051703799,
-                "att_a": 0.6849472424350895,
-                "def_a": 1.1822965694233578
+                "att_h": 0.8056428994226408,
+                "def_h": 0.9532660955046353,
+                "att_a": 0.6812055326598642,
+                "def_a": 1.1864226542217617,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Valencia CF": {
                 "id_api": 95,
-                "att_h": 0.9494810010004855,
-                "def_h": 0.9906225516198262,
-                "att_a": 1.0045812109920802,
-                "def_a": 0.9063655397342532
+                "att_h": 0.9001295578507126,
+                "def_h": 1.0809932843757224,
+                "att_a": 0.9994440341545912,
+                "def_a": 0.9090815587726676,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Real Sociedad de Fútbol": {
                 "id_api": 92,
-                "att_h": 1.1410115384709818,
-                "def_h": 1.0949975220923,
-                "att_a": 1.1055156759453586,
-                "def_a": 1.182096574529977
+                "att_h": 1.1441046340617549,
+                "def_h": 1.08873469673692,
+                "att_a": 1.1001243190099714,
+                "def_a": 1.1857849307676431,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "RC Celta de Vigo": {
                 "id_api": 558,
-                "att_h": 0.9006440281997827,
-                "def_h": 1.287419057917755,
-                "att_a": 1.115821111462888,
-                "def_a": 0.8170528220516867
+                "att_h": 0.9030113051984332,
+                "def_h": 1.2811783548965123,
+                "att_a": 1.1098983231983959,
+                "def_a": 0.8197498901070829,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Getafe CF": {
                 "id_api": 82,
-                "att_h": 0.534648145476743,
-                "def_h": 0.8269749193110045,
-                "att_a": 0.7533426259475101,
-                "def_a": 0.8194852854435406
+                "att_h": 0.5368529789666394,
+                "def_h": 0.8224704019892505,
+                "att_a": 0.7495526577783532,
+                "def_a": 0.8218516081466584,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Athletic Club": {
                 "id_api": 77,
-                "att_h": 0.9002157962440627,
-                "def_h": 0.953636804830938,
-                "att_a": 0.9863132770304123,
-                "def_a": 1.0432963746082333
+                "att_h": 0.9028429283543207,
+                "def_h": 0.9493083576139613,
+                "att_a": 0.9814482195706955,
+                "def_a": 1.046563936762373,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Sevilla FC": {
                 "id_api": 559,
-                "att_h": 0.6811088588649705,
-                "def_h": 1.1910120435018108,
-                "att_a": 0.7550925066705564,
-                "def_a": 1.1682750817714513
+                "att_h": 0.6825107930909932,
+                "def_h": 1.1851047253332416,
+                "att_a": 0.7514393917044644,
+                "def_a": 1.1723200532910805,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "RCD Espanyol de Barcelona": {
                 "id_api": 80,
-                "att_h": 0.6678965542277171,
-                "def_h": 1.1302333037787027,
-                "att_a": 0.8928709108589533,
-                "def_a": 1.1291585665762591
+                "att_h": 0.6697236446551735,
+                "def_h": 1.1244670661603644,
+                "att_a": 0.8885079360070894,
+                "def_a": 1.1324902973837987,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Club Atlético de Madrid": {
                 "id_api": 78,
-                "att_h": 1.3335515696289955,
-                "def_h": 0.9006629360862226,
-                "att_a": 0.9327368334008274,
-                "def_a": 0.9789972199609962
+                "att_h": 1.3374469907311364,
+                "def_h": 0.8966144215964709,
+                "att_a": 1.0276707664136684,
+                "def_a": 0.9278723079794563,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Elche CF": {
                 "id_api": 285,
-                "att_h": 1.0915230400459637,
-                "def_h": 1.3549139641423944,
-                "att_a": 0.8950109656584347,
-                "def_a": 1.185849153442251
+                "att_h": 1.094948492969425,
+                "def_h": 1.349151670900578,
+                "att_a": 0.88992634887334,
+                "def_a": 1.1899314376463312,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Real Betis Balompié": {
                 "id_api": 90,
-                "att_h": 1.038414692221731,
-                "def_h": 0.8918249627825681,
-                "att_a": 1.0270426059877054,
-                "def_a": 0.8952598083421036
+                "att_h": 1.0415139087422756,
+                "def_h": 0.8875477787622784,
+                "att_a": 1.0219970094455673,
+                "def_a": 0.8979743368662891,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Real Madrid CF": {
                 "id_api": 86,
-                "att_h": 1.431721839650605,
-                "def_h": 0.8482008081921155,
-                "att_a": 1.4255184144441748,
-                "def_a": 0.7084133050992886
+                "att_h": 1.4361606537474114,
+                "def_h": 0.8445184295532193,
+                "att_a": 1.4188448457797436,
+                "def_a": 0.7098990708625337,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "CA Osasuna": {
                 "id_api": 79,
-                "att_h": 1.1220391707852955,
-                "def_h": 0.8722408072339324,
-                "att_a": 0.7816043845411735,
-                "def_a": 0.8873886561166184
+                "att_h": 1.125133652838891,
+                "def_h": 0.8678478798014642,
+                "att_a": 0.7773444369582331,
+                "def_a": 0.8901515166312132,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "UD Las Palmas": {
                 "id_api": 275,
-                "att_h": 0.6645018070188579,
-                "def_h": 1.2836736552940067,
-                "att_a": 0.7266234742824833,
-                "def_a": 1.0997747530965238
+                "att_h": 0.6663018116919402,
+                "def_h": 1.2776039062679996,
+                "att_a": 0.7225530313170685,
+                "def_a": 1.1032302278074737,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "CD Leganés": {
                 "id_api": 745,
-                "att_h": 0.8402648880703065,
-                "def_h": 1.2230995507999813,
-                "att_a": 0.8011085379357742,
-                "def_a": 1.012334159057379
+                "att_h": 0.8427336537531711,
+                "def_h": 1.2168235102850358,
+                "att_a": 0.7971195891017508,
+                "def_a": 1.0149801271560948,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             },
             "Real Valladolid CF": {
                 "id_api": 250,
-                "att_h": 0.3238430146154166,
-                "def_h": 1.5727719782426532,
-                "att_a": 0.7007894162673469,
-                "def_a": 1.8680650416232332
+                "att_h": 0.3249692956287405,
+                "def_h": 1.565595568378996,
+                "att_a": 0.6973969216353143,
+                "def_a": 1.8734228048717014,
+                "tarjetas": {
+                    "avg_amarillas": 2.1,
+                    "avg_rojas": 0.1,
+                    "partidos_analizados": 0
+                }
             }
         },
         "h2h": {
@@ -6388,6 +6503,27 @@
                 ],
                 "temporadas_con_xg": 1
             },
+            "95_78": {
+                "partidos": [
+                    {
+                        "fecha": "2026-05-02",
+                        "goles_h": 0,
+                        "goles_a": 2,
+                        "xg_h": 1.35,
+                        "xg_a": 2.32,
+                        "winner": "AWAY_TEAM"
+                    },
+                    {
+                        "fecha": "2025-02-22",
+                        "goles_h": 0,
+                        "goles_a": 3,
+                        "xg_h": 1.35,
+                        "xg_a": 2.32,
+                        "winner": "AWAY_TEAM"
+                    }
+                ],
+                "temporadas_con_xg": 2
+            },
             "275_559": {
                 "partidos": [
                     {
@@ -7597,19 +7733,6 @@
                 ],
                 "temporadas_con_xg": 1
             },
-            "95_78": {
-                "partidos": [
-                    {
-                        "fecha": "2025-02-22",
-                        "goles_h": 0,
-                        "goles_a": 3,
-                        "xg_h": 1.35,
-                        "xg_a": 2.32,
-                        "winner": "AWAY_TEAM"
-                    }
-                ],
-                "temporadas_con_xg": 1
-            },
             "275_81": {
                 "partidos": [
                     {
@@ -8236,14 +8359,15 @@
             }
         }
     },
-    "last_update": "2026-05-02 14:41:27",
+    "last_update": "2026-05-02 16:56:15",
     "meta": {
-        "partidos_totales": 712,
-        "partidos_con_xg": 609,
+        "partidos_totales": 713,
+        "partidos_con_xg": 610,
         "partidos_sin_xg": 38,
         "partidos_sin_understat": 65,
         "xg_weight": 0.6,
         "time_decay_lambda": 0.007,
-        "pares_h2h": 474
+        "pares_h2h": 474,
+        "tarjetas_con_data": 0
     }
 }
