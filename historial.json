@@ -24,5 +24,18 @@
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
         "status": "⏳ PENDIENTE"
+    },
+    {
+        "fecha": "2026-05-01 20:44",
+        "partido": "Villarreal CF vs Levante UD",
+        "pick": "Villarreal CF",
+        "poisson": "57.4%",
+        "cuota": 1.708,
+        "edge": "4.2%",
+        "stake": "0.82%",
+        "nivel": "PLATA 🥈",
+        "pick_riesgo": "Empate",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
