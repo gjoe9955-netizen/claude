@@ -37,7 +37,9 @@ TIME_DECAY_LAMBDA = 0.007
 XG_WEIGHT         = 0.6
 
 # Equipos que NO están en Understat LaLiga
-EQUIPOS_SIN_UNDERSTAT = {"levante", "oviedo"}
+# - levante/oviedo: Segunda División
+# - valladolid: descendió temporadas recientes, sin datos en Understat
+EQUIPOS_SIN_UNDERSTAT = {"levante", "oviedo", "valladolid"}
 
 # ID de LaLiga en SportAPI7 (uniqueTournament)
 LALIGA_TOURNAMENT_ID = 8
@@ -736,7 +738,7 @@ def train_spain():
         print(f"   Partidos totales:      {len(goles)}")
         print(f"   Con xG:                {partidos_con_xg}")
         print(f"   Sin xG (mapeo):        {partidos_sin_xg}")
-        print(f"   Sin Understat:         {partidos_sin_understat} (Levante/Oviedo — normal)")
+        print(f"   Sin Understat:         {partidos_sin_understat} (Levante/Oviedo/Valladolid — normal)")
         print(f"   Pares H2H:             {len(h2h_data)}")
         print(f"   Equipos con tarjetas:  {output['meta']['tarjetas_con_data']}")
 
