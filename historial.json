@@ -1,1 +1,15 @@
-[]
+[
+    {
+        "fecha": "2026-05-02 07:44",
+        "partido": "Valencia CF vs Club Atlético de Madrid",
+        "pick": "Club Atlético de Madrid",
+        "poisson": "38.7%",
+        "cuota": 4.867,
+        "edge": "11.0%",
+        "stake": "0.5%",
+        "nivel": "BRONCE 🥉",
+        "pick_riesgo": "Empate",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
+    }
+]
