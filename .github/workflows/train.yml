@@ -29,6 +29,7 @@ jobs:
       - name: Ejecutar el script Trainer
         env:
           FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
         run: python trainer.py
 
       - name: Subir cambios al repositorio
