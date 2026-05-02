@@ -10,7 +10,8 @@
         "nivel": "NO BET 🚫",
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
-        "status": "⏳ PENDIENTE"
+        "status": "➖ VOID",
+        "marcador_real": "0-1"
     },
     {
         "fecha": "2026-05-01 11:32",
@@ -23,7 +24,8 @@
         "nivel": "NO BET 🚫",
         "pick_riesgo": "Sin valor alternativo",
         "stake_riesgo": "0%",
-        "status": "⏳ PENDIENTE"
+        "status": "➖ VOID",
+        "marcador_real": "0-1"
     },
     {
         "fecha": "2026-05-01 20:44",
