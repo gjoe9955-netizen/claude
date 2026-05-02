@@ -15,11 +15,13 @@ from understat import Understat
 #   - Understat.com     → xG gratis via librería understat (aiohttp)
 #   - SportAPI7         → tarjetas amarillas/rojas por partido (RapidAPI)
 #
-# Versión v4:
-#   - Agrega tarjetas promedio por equipo desde SportAPI7
-#   - Mapeo dinámico Football-Data → SportAPI7 con fuzzy matching
-#   - Diccionario de excepciones para casos problemáticos
-#   - Tarjetas se guardan en JSON como dato extra, sin afectar Poisson
+# Versión v4.1:
+#   - FIX: season_id dinámico en obtener_equipos_rapid_laliga()
+#          El ID ya no está hardcodeado — se obtiene primero y se pasa
+#          como parámetro a obtener_equipos_rapid_laliga() y
+#          obtener_eventos_laliga_rapid() para evitar fallos silenciosos.
+#   - FIX: valladolid agregado a EQUIPOS_SIN_UNDERSTAT (bajó a Segunda,
+#          Understat no tiene sus datos → se usa goles reales como fallback)
 # ===========================================================================
 
 API_KEY         = os.getenv("FOOTBALL_DATA_API_KEY")
@@ -46,8 +48,6 @@ LALIGA_TOURNAMENT_ID = 8
 
 # ===========================================================================
 # EXCEPCIONES DE MAPEO — nombres muy diferentes entre FD y SportAPI7
-# Clave: nombre normalizado Football-Data → nombre SportAPI7
-# Solo para los casos donde fuzzy matching falla
 # ===========================================================================
 EXCEPCIONES_FD_A_RAPID = {
     "club atlético de madrid"   : "Atlético Madrid",
@@ -234,17 +234,41 @@ def normalizar_nombre(nombre_fd: str) -> str:
 
 
 # ===========================================================================
+# SPORTAPI7 — season ID dinámico
+# ===========================================================================
+
+def obtener_season_id_laliga() -> int:
+    """
+    Obtiene el seasonId actual de LaLiga desde SportAPI7.
+    Fallback al ID conocido si falla.
+    """
+    SEASON_ID_FALLBACK = 61643  # LaLiga 25/26
+
+    if not RAPIDAPI_KEY:
+        return SEASON_ID_FALLBACK
+
+    try:
+        url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/seasons"
+        r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
+        if r.status_code == 200:
+            seasons = r.json().get("seasons", [])
+            if seasons:
+                season_id = seasons[0].get("id", SEASON_ID_FALLBACK)
+                print(f"   ✅ SportAPI7 season ID LaLiga: {season_id} ({seasons[0].get('name', '')})")
+                return season_id
+    except Exception as e:
+        print(f"   ⚠️  Error obteniendo season ID: {e}. Usando fallback {SEASON_ID_FALLBACK}.")
+
+    return SEASON_ID_FALLBACK
+
+
+# ===========================================================================
 # SPORTAPI7 — mapeo dinámico Football-Data → SportAPI7
 # ===========================================================================
 
 def _similitud(a: str, b: str) -> float:
-    """
-    Similitud simple entre dos strings basada en palabras comunes.
-    Devuelve valor entre 0.0 y 1.0.
-    """
     palabras_a = set(a.lower().split())
     palabras_b = set(b.lower().split())
-    # Ignorar palabras genéricas que confunden el matching
     stopwords  = {"fc", "cf", "ud", "cd", "rc", "rcd", "ca", "de", "la", "el", "los", "club"}
     palabras_a -= stopwords
     palabras_b -= stopwords
@@ -255,23 +279,16 @@ def _similitud(a: str, b: str) -> float:
 
 
 def construir_mapeo_rapid(equipos_fd: list, equipos_rapid: list) -> dict:
-    """
-    Construye mapeo nombre_fd_lower → nombre_rapid.
-    Primero aplica excepciones manuales, luego fuzzy matching para el resto.
-    Devuelve dict y loguea advertencias para casos sin match claro.
-    """
-    mapeo = {}
+    mapeo     = {}
     sin_match = []
 
     for nombre_fd in equipos_fd:
         key_fd = nombre_fd.strip().lower()
 
-        # 1. Excepción manual
         if key_fd in EXCEPCIONES_FD_A_RAPID:
             mapeo[key_fd] = EXCEPCIONES_FD_A_RAPID[key_fd]
             continue
 
-        # 2. Fuzzy matching
         mejor_score  = 0.0
         mejor_nombre = None
         for nombre_r in equipos_rapid:
@@ -284,7 +301,6 @@ def construir_mapeo_rapid(equipos_fd: list, equipos_rapid: list) -> dict:
             mapeo[key_fd] = mejor_nombre
         else:
             sin_match.append(nombre_fd)
-            # Fallback: usar el nombre de FD tal cual
             mapeo[key_fd] = nombre_fd
 
     if sin_match:
@@ -294,21 +310,18 @@ def construir_mapeo_rapid(equipos_fd: list, equipos_rapid: list) -> dict:
     return mapeo
 
 
-def obtener_equipos_rapid_laliga() -> list:
+def obtener_equipos_rapid_laliga(season_id: int) -> list:
     """
-    Obtiene la lista de equipos de LaLiga desde SportAPI7 para el día actual.
-    Filtra solo partidos de LaLiga (uniqueTournament.id = 8).
+    Obtiene la lista de equipos de LaLiga desde SportAPI7.
+    Recibe season_id dinámico — ya no está hardcodeado.
     """
     if not RAPIDAPI_KEY:
         return []
 
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-    # Buscar en una ventana de fechas para asegurar encontrar equipos
     equipos = set()
 
-    # Intentar con partidos de los últimos 30 días para tener equipos
     try:
-        url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/season/61643/standings/total"
+        url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/season/{season_id}/standings/total"
         r   = requests.get(url, headers=RAPID_HEADERS, timeout=15)
         if r.status_code == 200:
             data = r.json()
@@ -318,13 +331,16 @@ def obtener_equipos_rapid_laliga() -> list:
                 if nombre:
                     equipos.add(nombre)
             if equipos:
-                print(f"   ✅ SportAPI7 standings: {len(equipos)} equipos obtenidos.")
+                print(f"   ✅ SportAPI7 standings: {len(equipos)} equipos obtenidos (season {season_id}).")
                 return list(equipos)
+        else:
+            print(f"   ⚠️  SportAPI7 standings HTTP {r.status_code} para season {season_id}.")
     except Exception as e:
         print(f"   ⚠️  Error obteniendo standings SportAPI7: {e}")
 
     # Fallback: buscar en partidos del día de hoy
     try:
+        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
         url = f"https://{RAPIDAPI_HOST}/api/v1/sport/football/scheduled-events/{fecha_hoy}"
         r   = requests.get(url, headers=RAPID_HEADERS, timeout=15)
         if r.status_code == 200:
@@ -347,45 +363,13 @@ def obtener_equipos_rapid_laliga() -> list:
 # SPORTAPI7 — descarga tarjetas por equipo desde incidents
 # ===========================================================================
 
-def obtener_season_id_laliga() -> int:
-    """
-    Obtiene el seasonId actual de LaLiga desde SportAPI7.
-    Fallback al ID conocido si falla.
-    """
-    SEASON_ID_FALLBACK = 61643  # LaLiga 25/26
-
-    if not RAPIDAPI_KEY:
-        return SEASON_ID_FALLBACK
-
-    try:
-        url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/seasons"
-        r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
-        if r.status_code == 200:
-            seasons = r.json().get("seasons", [])
-            if seasons:
-                # El primero suele ser el más reciente
-                season_id = seasons[0].get("id", SEASON_ID_FALLBACK)
-                print(f"   ✅ SportAPI7 season ID LaLiga: {season_id} ({seasons[0].get('name', '')})")
-                return season_id
-    except Exception as e:
-        print(f"   ⚠️  Error obteniendo season ID: {e}. Usando fallback {SEASON_ID_FALLBACK}.")
-
-    return SEASON_ID_FALLBACK
-
-
 def obtener_eventos_laliga_rapid(season_id: int) -> list:
-    """
-    Obtiene los últimos eventos FINISHED de LaLiga desde SportAPI7.
-    Devuelve lista de event_ids para consultar incidents.
-    Limitado a los últimos 10 partidos por jornada × las últimas 5 jornadas = ~100 eventos max.
-    """
     if not RAPIDAPI_KEY:
         return []
 
     eventos = []
     try:
-        # Últimas 5 jornadas (rounds)
-        for ronda in range(33, 38):  # Ajustar según jornada actual
+        for ronda in range(33, 38):
             url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/season/{season_id}/events/round/{ronda}"
             r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
             if r.status_code == 200:
@@ -397,7 +381,7 @@ def obtener_eventos_laliga_rapid(season_id: int) -> list:
                             "home": ev.get("homeTeam", {}).get("name", ""),
                             "away": ev.get("awayTeam", {}).get("name", "")
                         })
-            import time; time.sleep(0.3)  # respetar rate limit
+            import time; time.sleep(0.3)
 
         print(f"   ✅ SportAPI7 eventos LaLiga: {len(eventos)} partidos terminados encontrados.")
     except Exception as e:
@@ -407,10 +391,6 @@ def obtener_eventos_laliga_rapid(season_id: int) -> list:
 
 
 def obtener_tarjetas_por_partido(event_id: int) -> dict:
-    """
-    Obtiene tarjetas amarillas y rojas de un partido desde incidents.
-    Devuelve dict: {nombre_equipo: {amarillas: N, rojas: N}}
-    """
     if not RAPIDAPI_KEY:
         return {}
 
@@ -420,16 +400,15 @@ def obtener_tarjetas_por_partido(event_id: int) -> dict:
         if r.status_code != 200:
             return {}
 
-        incidents  = r.json().get("incidents", [])
-        tarjetas   = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
+        incidents = r.json().get("incidents", [])
+        tarjetas  = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
 
         for inc in incidents:
             tipo = str(inc.get("incidentType", "")).lower()
             if "card" not in tipo:
                 continue
 
-            # Determinar color de tarjeta
-            color = str(inc.get("incidentClass", "")).lower()
+            color       = str(inc.get("incidentClass", "")).lower()
             equipo_info = inc.get("team", {})
             nombre_eq   = equipo_info.get("name", "")
             if not nombre_eq:
@@ -442,21 +421,15 @@ def obtener_tarjetas_por_partido(event_id: int) -> dict:
 
         return dict(tarjetas)
 
-    except Exception as e:
+    except Exception:
         return {}
 
 
 def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: list) -> dict:
-    """
-    Para cada equipo calcula tarjetas amarillas/rojas promedio por partido
-    usando los incidents de los eventos descargados.
-    Devuelve dict: nombre_fd → {avg_amarillas, avg_rojas, partidos_analizados}
-    """
-    # Acumulador: nombre_rapid → lista de tarjetas por partido
     acum = defaultdict(lambda: {"amarillas": [], "rojas": []})
 
-    total_eventos   = len(eventos)
-    eventos_ok      = 0
+    total_eventos    = len(eventos)
+    eventos_ok       = 0
     eventos_sin_data = 0
 
     print(f"   Procesando incidents de {total_eventos} partidos...")
@@ -472,13 +445,11 @@ def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: lis
         else:
             eventos_sin_data += 1
 
-        # Rate limit: pausa cada 5 llamadas
         if (i + 1) % 5 == 0:
             time.sleep(0.5)
 
     print(f"   ✅ Incidents procesados: {eventos_ok} OK | {eventos_sin_data} sin data")
 
-    # Construir resultado indexado por nombre_fd
     resultado = {}
     for nombre_fd in equipos_fd:
         key_fd     = nombre_fd.strip().lower()
@@ -486,7 +457,6 @@ def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: lis
 
         datos_rap = acum.get(nombre_rap)
         if not datos_rap or not datos_rap["amarillas"]:
-            # Intentar match parcial si el nombre exacto no está
             for k, v in acum.items():
                 if _similitud(nombre_rap, k) >= 0.6 and v["amarillas"]:
                     datos_rap = v
@@ -499,7 +469,6 @@ def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: lis
                 "partidos_analizados": len(datos_rap["amarillas"])
             }
         else:
-            # Fallback con promedios de LaLiga (~2.1 amarillas, ~0.1 rojas por equipo por partido)
             resultado[nombre_fd] = {
                 "avg_amarillas":       2.1,
                 "avg_rojas":           0.1,
@@ -673,19 +642,19 @@ def train_spain():
             }
 
         # --- SportAPI7: tarjetas promedio ---
+        # FIX: obtener season_id dinámico PRIMERO y pasarlo a ambas funciones
         tarjetas_data = {}
         if usar_rapid:
             print("Obteniendo tarjetas desde SportAPI7...")
 
-            # Mapeo dinámico FD → SportAPI7
-            equipos_rapid = obtener_equipos_rapid_laliga()
+            season_id     = obtener_season_id_laliga()
+            equipos_rapid = obtener_equipos_rapid_laliga(season_id)
+
             if equipos_rapid:
                 mapeo_rapid = construir_mapeo_rapid(equipos_fd, equipos_rapid)
                 print(f"   ✅ Mapeo construido para {len(mapeo_rapid)} equipos.")
 
-                # Obtener season ID y eventos
-                season_id = obtener_season_id_laliga()
-                eventos   = obtener_eventos_laliga_rapid(season_id)
+                eventos = obtener_eventos_laliga_rapid(season_id)
 
                 if eventos:
                     tarjetas_data = calcular_tarjetas_promedio(equipos_fd, mapeo_rapid, eventos)
@@ -733,7 +702,7 @@ def train_spain():
         with open('modelo_poisson.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=4, ensure_ascii=False)
 
-        print(f"\n✅ modelo_poisson.json actualizado (v4).")
+        print(f"\n✅ modelo_poisson.json actualizado (v4.1).")
         print(f"   Equipos:               {len(teams_stats)}")
         print(f"   Partidos totales:      {len(goles)}")
         print(f"   Con xG:                {partidos_con_xg}")
