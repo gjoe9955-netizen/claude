@@ -38,7 +38,7 @@
                 "tarjetas": {
                     "avg_amarillas": 2.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "partidos_analizados": 1
                 }
             },
             "Real Oviedo": {
@@ -48,7 +48,7 @@
                 "att_a": 1.091473488726391,
                 "def_a": 1.306854016249478,
                 "tarjetas": {
-                    "avg_amarillas": 1.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
                     "partidos_analizados": 1
                 }
@@ -60,7 +60,7 @@
                 "att_a": 0.6899522063228816,
                 "def_a": 1.1226389580628882,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
                     "partidos_analizados": 1
                 }
@@ -84,9 +84,9 @@
                 "att_a": 1.061775185112253,
                 "def_a": 1.0432774748324767,
                 "tarjetas": {
-                    "avg_amarillas": 2.5,
+                    "avg_amarillas": 4.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "partidos_analizados": 1
                 }
             },
             "Levante UD": {
@@ -108,9 +108,9 @@
                 "att_a": 0.9955735042870237,
                 "def_a": 0.9134227619226735,
                 "tarjetas": {
-                    "avg_amarillas": 1.5,
+                    "avg_amarillas": 2.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "partidos_analizados": 1
                 }
             },
             "Real Sociedad de Fútbol": {
@@ -120,7 +120,7 @@
                 "att_a": 1.0960967189099589,
                 "def_a": 1.191791835841887,
                 "tarjetas": {
-                    "avg_amarillas": 4.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
                     "partidos_analizados": 1
                 }
@@ -132,7 +132,7 @@
                 "att_a": 1.1053443196072559,
                 "def_a": 0.8231401305905116,
                 "tarjetas": {
-                    "avg_amarillas": 1.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
                     "partidos_analizados": 1
                 }
@@ -144,8 +144,8 @@
                 "att_a": 0.746316531729556,
                 "def_a": 0.8260851921216517,
                 "tarjetas": {
-                    "avg_amarillas": 5.0,
-                    "avg_rojas": 0.0,
+                    "avg_amarillas": 4.0,
+                    "avg_rojas": 1.0,
                     "partidos_analizados": 1
                 }
             },
@@ -156,9 +156,9 @@
                 "att_a": 1.0647548903234993,
                 "def_a": 1.0132672323376462,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
-                    "avg_rojas": 0.5,
-                    "partidos_analizados": 2
+                    "avg_amarillas": 2.0,
+                    "avg_rojas": 0.0,
+                    "partidos_analizados": 1
                 }
             },
             "Sevilla FC": {
@@ -168,7 +168,7 @@
                 "att_a": 0.7488076046970896,
                 "def_a": 1.1776393323434688,
                 "tarjetas": {
-                    "avg_amarillas": 4.0,
+                    "avg_amarillas": 1.0,
                     "avg_rojas": 0.0,
                     "partidos_analizados": 1
                 }
@@ -193,8 +193,8 @@
                 "def_a": 0.9086789205013376,
                 "tarjetas": {
                     "avg_amarillas": 3.0,
-                    "avg_rojas": 0.5,
-                    "partidos_analizados": 2
+                    "avg_rojas": 0.0,
+                    "partidos_analizados": 1
                 }
             },
             "Elche CF": {
@@ -204,7 +204,7 @@
                 "att_a": 0.8866945556297621,
                 "def_a": 1.1958150234653218,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
                     "partidos_analizados": 1
                 }
@@ -276,9 +276,9 @@
                 "att_a": 0.693888158785872,
                 "def_a": 1.8823100122187362,
                 "tarjetas": {
-                    "avg_amarillas": 2.1,
-                    "avg_rojas": 0.1,
-                    "partidos_analizados": 0
+                    "avg_amarillas": 1.0,
+                    "avg_rojas": 0.0,
+                    "partidos_analizados": 1
                 }
             }
         },
@@ -8385,5 +8385,6 @@
         "time_decay_lambda": 0.007,
         "pares_h2h": 474,
         "tarjetas_con_data": 20
-    }
+    },
+    "last_update_tarjetas": "2026-05-03 07:30:32"
 }
