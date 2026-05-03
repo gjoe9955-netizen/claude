@@ -361,9 +361,14 @@ def obtener_tarjetas_del_modelo(full_data: dict, nombre_local: str, nombre_visit
 # BÚSQUEDA DE BAJAS (Serper + Jina)
 # ============================================================
 PALABRAS_BAJA_LOCAL   = [
-    "baja", "lesión", "lesionado", "no jugará", "ausente", "descartado", "out",
+    # Español
+    "baja", "lesión", "lesionado", "no jugará", "ausente", "descartado",
     "baja confirmada", "no estará", "se pierde", "fuera de la convocatoria",
-    "no disponible", "sancionado", "suspendido"
+    "no disponible", "sancionado", "suspendido", "duda", "baja por lesión",
+    # Inglés
+    "out", "injured", "injury", "suspended", "suspension", "doubtful",
+    "ruled out", "miss", "misses", "unavailable", "banned", "absence",
+    "will not play", "won\'t play", "fitness concern", "muscular",
 ]
 PALABRAS_BAJA_VISITA = PALABRAS_BAJA_LOCAL
 
@@ -440,9 +445,9 @@ async def obtener_contexto_real(l_q, v_q):
 
         if any(nombre in texto_analisis for nombre in l_buscar):
             if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
-                if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
+                if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta", "forward", "striker", "winger", "attacker"]):
                     penalty_local = min(penalty_local, 0.88)
-                elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
+                elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral", "goalkeeper", "defender", "centre-back", "fullback"]):
                     penalty_local = min(penalty_local, 0.95)
                 else:
                     penalty_local = min(penalty_local, 0.93)
@@ -451,9 +456,9 @@ async def obtener_contexto_real(l_q, v_q):
 
         if any(nombre in texto_analisis for nombre in v_buscar):
             if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
-                if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
+                if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta", "forward", "striker", "winger", "attacker"]):
                     penalty_visita = min(penalty_visita, 0.88)
-                elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
+                elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral", "goalkeeper", "defender", "centre-back", "fullback"]):
                     penalty_visita = min(penalty_visita, 0.95)
                 else:
                     penalty_visita = min(penalty_visita, 0.93)
@@ -1327,14 +1332,18 @@ async def handle_pronostico(message):
         kelly_fraccionado = kelly_full * kelly_fraccion
         stake_base        = round(kelly_fraccionado * 100, 2)
         stake             = round(stake_base * ou_factor, 2)
-        stake             = max(0.25, min(stake, 3.0))
+        # Tope dinámico: sube a 5% si el edge es muy fuerte (>20%) y la cuota es alta (>2.5)
+        # para no castrar picks con valor real excepcional
+        tope_kelly = 5.0 if (edge_principal > 0.20 and cuota_pick > 2.5) else 4.0
+        stake             = max(0.25, min(stake, tope_kelly))
         pick_final        = nombre_pick
         p_percent         = prob_pick_pct
 
         if stake < 0.75:     nivel = "BRONCE 🥉"
         elif stake < 1.25:   nivel = "PLATA 🥈"
         elif stake < 2.0:    nivel = "ORO 🥇"
-        else:                nivel = "DIAMANTE 💎"
+        elif stake < 3.5:    nivel = "DIAMANTE 💎"
+        else:                nivel = "ÉLITE 🏆"
 
         if len(candidatos) > 1:
             _, edge_riesgo, pick_riesgo_cuota, pick_riesgo_nombre, prob_riesgo = candidatos[1]
