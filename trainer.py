@@ -244,9 +244,11 @@ def construir_mapeo_rapid(equipos_fd: list, equipos_rapid: list) -> dict:
 
 
 def obtener_equipos_rapid_laliga(season_id: int) -> list:
+    import time
     if not RAPIDAPI_KEY:
         return []
     equipos = set()
+    time.sleep(2)  # delay antes de standings
     try:
         url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/season/{season_id}/standings/total"
         r   = requests.get(url, headers=RAPID_HEADERS, timeout=15)
@@ -295,7 +297,7 @@ def obtener_eventos_laliga_rapid(season_id: int) -> list:
                             "home": ev.get("homeTeam", {}).get("name", ""),
                             "away": ev.get("awayTeam", {}).get("name", "")
                         })
-            import time; time.sleep(0.3)
+            import time; time.sleep(1.5)
         print(f"   ✅ SportAPI7 eventos LaLiga: {len(eventos)} partidos terminados encontrados.")
     except Exception as e:
         print(f"   ⚠️  Error obteniendo eventos LaLiga: {e}")
@@ -327,7 +329,8 @@ def obtener_tarjetas_por_partido(event_id: int, home_name: str = "", away_name: 
         for inc in incidents:
             if inc.get("incidentType") != "card":
                 continue
-            color   = str(inc.get("incidentClass", "")).lower()
+            card_type      = str(inc.get("cardType", "")).lower()
+            incident_class = str(inc.get("incidentClass", "")).lower()
             is_home = inc.get("isHome")
 
             # Determinar equipo por isHome
@@ -342,9 +345,11 @@ def obtener_tarjetas_por_partido(event_id: int, home_name: str = "", away_name: 
             if not nombre_eq:
                 continue
 
-            if "yellow" in color:
+            if "yellowred" in card_type or "yellowred" in incident_class:
+                tarjetas[nombre_eq]["rojas"] += 1  # doble amarilla = roja
+            elif "yellow" in card_type or "yellow" in incident_class:
                 tarjetas[nombre_eq]["amarillas"] += 1
-            elif "red" in color:
+            elif "red" in card_type or "red" in incident_class:
                 tarjetas[nombre_eq]["rojas"] += 1
 
         return dict(tarjetas)
@@ -375,7 +380,9 @@ def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: lis
         else:
             eventos_sin_data += 1
         if (i + 1) % 5 == 0:
-            time.sleep(0.5)
+            time.sleep(2)
+        else:
+            time.sleep(1)
     print(f"   ✅ Incidents procesados: {eventos_ok} OK | {eventos_sin_data} sin data")
     resultado = {}
     for nombre_fd in equipos_fd:
