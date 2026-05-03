@@ -26,5 +26,18 @@
         "stake_riesgo": "0%",
         "status": "✅ WIN",
         "marcador_real": "2-0"
+    },
+    {
+        "fecha": "2026-05-03 01:48",
+        "partido": "RC Celta de Vigo vs Elche CF",
+        "pick": "No Bet",
+        "poisson": "0.0%",
+        "cuota": 1.85,
+        "edge": "0.0%",
+        "stake": "0%",
+        "nivel": "NO BET 🚫",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
