@@ -1209,6 +1209,9 @@ async def handle_pronostico(message):
     if edge_empate   > 0: candidatos.append(("empate", edge_empate,   c_e, "Empate", prob_poisson_empate_cal * 100))
     if edge_visita   > 0: candidatos.append(("visita", edge_visita,   c_v, m_v,      prob_poisson_visita_cal * 100))
 
+    # FIX: Calcular marcadores probables SIEMPRE (no solo en NO BET)
+    top_scores = calcular_marcadores_probables(lh, la, top_n=3)
+
     pick_riesgo_nombre = None
     stake_riesgo       = 0
     nivel_riesgo       = ""
@@ -1241,6 +1244,14 @@ async def handle_pronostico(message):
             if stake_riesgo < 0.50:   nivel_riesgo = "RIESGO BAJO ⚠️"
             elif stake_riesgo < 0.75: nivel_riesgo = "RIESGO MEDIO 🎲"
             else:                     nivel_riesgo = "RIESGO ALTO 🔴"
+        else:
+            # FIX: Si no hay candidato de riesgo alternativo, usar marcador más probable
+            if top_scores:
+                marcador_top       = top_scores[0][0]
+                prob_riesgo        = top_scores[0][1] * 100
+                pick_riesgo_nombre = f"{marcador_top[0]}-{marcador_top[1]}"
+                stake_riesgo       = 0.25
+                nivel_riesgo       = "RIESGO ALTO 🔴"
     else:
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
         ou_factor     = 1.0
@@ -1251,7 +1262,6 @@ async def handle_pronostico(message):
         nombre_pick   = "No Bet"
         p_percent     = 0
 
-        top_scores = calcular_marcadores_probables(lh, la, top_n=3)
         if top_scores:
             marcador_top       = top_scores[0][0]
             prob_riesgo        = top_scores[0][1] * 100
@@ -1312,20 +1322,16 @@ async def handle_pronostico(message):
     lam_ro_l = tarj_l['avg_rojas']
     lam_ro_v = tarj_v['avg_rojas']
 
-    # Probabilidad de recibir al menos 1 amarilla (primera tarjeta)
     prob_am_l = round((1 - poisson.pmf(0, lam_am_l)) * 100, 1)
     prob_am_v = round((1 - poisson.pmf(0, lam_am_v)) * 100, 1)
 
-    # Equipo más propenso a la primera amarilla
     equipo_propenso_am = m_l if prob_am_l >= prob_am_v else m_v
     prob_propenso_am   = max(prob_am_l, prob_am_v)
 
-    # Probabilidad de primera roja
     prob_ro_l = round((1 - poisson.pmf(0, lam_ro_l)) * 100, 1)
     prob_ro_v = round((1 - poisson.pmf(0, lam_ro_v)) * 100, 1)
     equipo_propenso_ro = m_l if prob_ro_l >= prob_ro_v else m_v
 
-    # Over/Under tarjetas amarillas totales
     lam_am_total = lam_am_l + lam_am_v
     prob_over3_5_am = round(sum(
         poisson.pmf(k, lam_am_total) for k in range(4, 20)
@@ -1369,7 +1375,26 @@ async def handle_pronostico(message):
         f"<b>🚩</b> {html.escape(_fmt_goleadores(goleadores_partido['visita']))}\n"
     )
 
+    # FIX: Marcadores probables SIEMPRE en el header (no solo en NO BET)
+    marcadores_block = ""
+    if top_scores:
+        marcadores_lines = "  ".join(
+            f"{m[0][0]}-{m[0][1]} ({m[1]*100:.1f}%)" for m in top_scores
+        )
+        marcadores_block = (
+            f"\n<b>◆ MARCADORES PROBABLES (Poisson)</b>\n"
+            f"<code>{html.escape(marcadores_lines)}</code>\n"
+        )
+
     calib_txt     = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
+    # FIX: Indicar dirección del factor calibración
+    if factor_calibracion < 1.0:
+        calib_dir = f"x{factor_calibracion:.2f} ↘ (modelo sobreestima)"
+    elif factor_calibracion > 1.0:
+        calib_dir = f"x{factor_calibracion:.2f} ↗ (modelo subestima)"
+    else:
+        calib_dir = "x1.00 (sin datos suficientes)"
+
     h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
     serper_txt    = ""
     if penalty_local  < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
@@ -1416,15 +1441,20 @@ async def handle_pronostico(message):
         f"\n<b>◆ SEÑALES</b>\n"
         f"<code>"
         f"Poisson  🏠 {p_local_pct:.1f}%  🤝 {p_empate_pct:.1f}%  🚩 {p_visita_pct:.1f}%\n"
-        f"λH {lh:.2f}  λA {la:.2f}\n"
+        # FIX: Mostrar lambda base junto al lambda ajustado
+        f"λH {lh:.2f} (base {lh_base:.2f})  λA {la:.2f} (base {la_base:.2f})\n"
         f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
         f"Mercado  Simple 🏠{prob_simple_l*100:.1f}% 🤝{prob_simple_e*100:.1f}% 🚩{prob_simple_v*100:.1f}%\n"
-        f"Shin z   {shin_z:.4f}  {html.escape(shin_confianza[:22])}\n"
+        # FIX: Shin como probabilidades % + z
+        f"Shin     🏠{shin_l*100:.1f}% 🤝{shin_e*100:.1f}% 🚩{shin_v*100:.1f}%  z={shin_z:.4f}\n"
+        f"Conf     {html.escape(shin_confianza)}\n"
         f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
         f"Rango L  [{rango_l[0]}-{rango_l[1]}]  Rango V [{rango_v[0]}-{rango_v[1]}]\n"
         f"Casas    {html.escape(', '.join(casas_usadas) if casas_usadas else 'default')}\n"
-        f"Calib    x{html.escape(calib_txt)}  {html.escape(ou_texto[:28])}\n"
-        f"Empate   {html.escape(empate_aviso[:38])}\n"
+        # FIX: ou_texto sin truncar + calib con dirección
+        f"Calib    {html.escape(calib_dir)}\n"
+        f"O/U      {html.escape(ou_texto)}\n"
+        f"Empate   {html.escape(empate_aviso)}\n"
         f"Margen   {margen_error*100:.3f}%{html.escape(zona_gris_txt)}"
         f"</code>\n"
     )
@@ -1440,10 +1470,17 @@ async def handle_pronostico(message):
         f"\n<b>◆ ANÁLISIS  {'✅' if check_odds else '❌'} Odds · {'✅' if check_json else '❌'} Poisson · {'✅' if check_h2h else '⚠️'} H2H</b>\n"
     )
 
-    header = decision_block + signals_block + context_block + tarjetas_block + lineup_txt + goleadores_block
+    header = decision_block + signals_block + context_block + marcadores_block + tarjetas_block + lineup_txt + goleadores_block
 
     gol_local_txt  = _fmt_goleadores(goleadores_partido["local"])
     gol_visita_txt = _fmt_goleadores(goleadores_partido["visita"])
+
+    # FIX: Marcadores probables SIEMPRE en el prompt_e
+    marcadores_prompt = ""
+    if top_scores:
+        marcadores_prompt = "\n── MARCADORES PROBABLES (Poisson) ──\n"
+        for i, (marcador, prob) in enumerate(top_scores, 1):
+            marcadores_prompt += f"• #{i}: {marcador[0]}-{marcador[1]} ({prob*100:.1f}%)\n"
 
     prompt_e = f"""
 Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en alguno de los tres resultados posibles del partido.
@@ -1453,19 +1490,19 @@ PARTIDO: {m_l} vs {m_v}
 ═══════════════════════════════════════
 
 ── MODELO POISSON + DIXON-COLES ──
-• Prob. victoria local (modelo): {p_local_pct:.1f}%  | λH: {lh:.2f} goles esperados
+• Prob. victoria local (modelo): {p_local_pct:.1f}%  | λH: {lh:.2f} (base: {lh_base:.2f})
 • Prob. empate (modelo): {p_empate_pct:.1f}%
-• Prob. victoria visitante (modelo): {p_visita_pct:.1f}%  | λA: {la:.2f} goles esperados
-• Lambda local BASE (sin ajustes): {lh_base:.2f}
-• Lambda visitante BASE (sin ajustes): {la_base:.2f}
-• Factor calibración histórica: ×{factor_calibracion:.2f}
+• Prob. victoria visitante (modelo): {p_visita_pct:.1f}%  | λA: {la:.2f} (base: {la_base:.2f})
+• Factor calibración histórica: {calib_dir}
 • Zona gris detectada: {'SÍ — modelo y mercado alineados (diferencia < 3%)' if zona_gris else 'No'}
-
+{marcadores_prompt}
 ── MERCADO DE CUOTAS ──
 • Cuota local: {c_l} → prob. implícita bruta: {(1/c_l)*100:.1f}%
 • Cuota empate: {c_e} → prob. implícita bruta: {(1/c_e)*100:.1f}%
 • Cuota visitante: {c_v} → prob. implícita bruta: {(1/c_v)*100:.1f}%
-• Overround: {overround:.4f} | Casas: {', '.join(casas_usadas) if casas_usadas else 'default'}
+• Overround: {overround:.4f}
+• Rango L [{rango_l[0]}-{rango_l[1]}] · Rango V [{rango_v[0]}-{rango_v[1]}]
+• Casas: {', '.join(casas_usadas) if casas_usadas else 'default'}
 
 ── MÉTODO SHIN ──
 • Prob. local Shin: {shin_l*100:.1f}% | Empate: {shin_e*100:.1f}% | Visita: {shin_v*100:.1f}%
@@ -1499,7 +1536,7 @@ PARTIDO: {m_l} vs {m_v}
 
 ── BAJAS (SERPER + JINA) ──
 • {serper_txt}
-• {contexto_noticias[:800]}
+• {contexto_noticias[:1500]}
 
 ── TARJETAS (POISSON) ──
 • {m_l}: λ={lam_am_l:.1f} amarillas | λ={lam_ro_l:.1f} rojas ({tarj_l.get('partidos_analizados',0)} partidos)
@@ -1529,6 +1566,7 @@ e) Bajas detectadas y su impacto en lambdas.
 f) Over/Under goles: confirma o contradice la dirección.
 g) Tarjetas: qué equipo es más propenso a la primera amarilla/roja, si Over 3.5 o 4.5 amarillas tiene valor, y si el partido apunta a ser tenso o fluido según los lambdas.
 h) Goleador más probable si hay dato disponible.
+i) Marcador más probable (Poisson) y qué implica para el pick.
 Sé directo, técnico y conciso. No repitas los números del header, interprétalos.
 """
 
@@ -1543,7 +1581,10 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
             f"Pick: {pick_final} | Nivel: {nivel} | Stake: {stake}%\n"
             f"Edge local: {edge_ajustado*100:.2f}% | Empate: {edge_empate*100:.2f}% | Visita: {edge_visita*100:.2f}%\n"
             f"Prob modelo: L {p_local_pct:.1f}% E {p_empate_pct:.1f}% V {p_visita_pct:.1f}%\n"
-            f"λH={lh:.2f} | λA={la:.2f} | Shin z={shin_z:.4f} | {shin_confianza}\n"
+            f"λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f}) | Shin z={shin_z:.4f} | {shin_confianza}\n"
+            f"Shin: L {shin_l*100:.1f}% E {shin_e*100:.1f}% V {shin_v*100:.1f}%\n"
+            f"Rango L [{rango_l[0]}-{rango_l[1]}] | Rango V [{rango_v[0]}-{rango_v[1]}] | Casas: {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
+            f"Calib: {calib_dir}\n"
             f"Tarjetas: {m_l} {tarj_l['avg_amarillas']:.1f}am/{tarj_l['avg_rojas']:.1f}r | {m_v} {tarj_v['avg_amarillas']:.1f}am/{tarj_v['avg_rojas']:.1f}r\n"
             f"Goleadores: L={gol_local_txt} | V={gol_visita_txt}\n"
             f"Pick riesgo: {pick_riesgo_nombre if pick_riesgo_nombre else 'N/A'} ({prob_riesgo:.1f}%)\n"
