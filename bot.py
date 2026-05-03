@@ -56,6 +56,33 @@ RAPID_HEADERS = {
     "X-RapidAPI-Host": RAPIDAPI_HOST
 }
 
+# ── MAPEO DE NOMBRES: Football-Data → The Odds API ───────────
+NOMBRES_ODDS_API = {
+    "Girona FC":                  "Girona",
+    "Rayo Vallecano de Madrid":   "Rayo Vallecano",
+    "Villarreal CF":              "Villarreal",
+    "Real Oviedo":                "Oviedo",
+    "RCD Mallorca":               "Mallorca",
+    "FC Barcelona":               "Barcelona",
+    "Deportivo Alavés":           "Alavés",
+    "Levante UD":                 "Levante",
+    "Valencia CF":                "Valencia",
+    "Real Sociedad de Fútbol":    "Real Sociedad",
+    "RC Celta de Vigo":           "Celta Vigo",
+    "Getafe CF":                  "Getafe",
+    "Athletic Club":              "Athletic Bilbao",
+    "Sevilla FC":                 "Sevilla",
+    "RCD Espanyol de Barcelona":  "Espanyol",
+    "Club Atlético de Madrid":    "Atlético Madrid",
+    "Elche CF":                   "Elche CF",
+    "Real Betis Balompié":        "Real Betis",
+    "Real Madrid CF":             "Real Madrid",
+    "CA Osasuna":                 "CA Osasuna",
+    "UD Las Palmas":              "Las Palmas",
+    "CD Leganés":                 "Leganés",
+    "Real Valladolid CF":         "Valladolid",
+}
+
 # ============================================================
 # CAMBIO 1 — Helper centralizado de errores de API
 # ============================================================
@@ -438,7 +465,7 @@ async def ejecutar_ia(rol, prompt):
 
 
 # --- Odds ---
-async def obtener_datos_mercado(equipo_l):
+async def obtener_datos_mercado(equipo_l, equipo_v=""):
     if not ODDS_API_KEY:
         return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
@@ -448,44 +475,60 @@ async def obtener_datos_mercado(equipo_l):
     }
     MAX_CASAS = 6
 
+    # Normalizar nombres usando mapeo Football-Data → Odds API
+    query_l = NOMBRES_ODDS_API.get(equipo_l, equipo_l)
+    query_v = NOMBRES_ODDS_API.get(equipo_v, equipo_v)
+
     try:
         url    = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'h2h'}
         r      = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
         if r.status_code != 200:
+            logging.warning(f"[OddsAPI] HTTP {r.status_code} — {r.text[:120]}")
             return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
+        mejor_score  = 0.0
+        mejor_match  = None
+
         for match in r.json():
-            home  = match['home_team'].lower()
-            query = equipo_l.lower()
-            if not (query in home or home in query):
+            score_h = _similitud(query_l, match['home_team'])
+            score_a = _similitud(query_v, match['away_team']) if query_v else 1.0
+            score   = (score_h + score_a) / 2
+            if score > mejor_score:
+                mejor_score = score
+                mejor_match = match
+
+        if not mejor_match or mejor_score < 0.35:
+            logging.warning(f"[OddsAPI] Partido no encontrado: '{query_l}' vs '{query_v}' (score={mejor_score:.2f})")
+            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+
+        logging.info(f"[OddsAPI] Partido encontrado: {mejor_match['home_team']} vs {mejor_match['away_team']} (score={mejor_score:.2f})")
+
+        bookmakers         = mejor_match.get('bookmakers', [])
+        bookmakers_ordenados = sorted(bookmakers, key=lambda b: (0 if b['key'] in CASAS_PREFERIDAS else 1))
+        ol_list, oe_list, ov_list = [], [], []
+        casas_usadas = []
+
+        for bm in bookmakers_ordenados[:MAX_CASAS]:
+            try:
+                outcomes = bm['markets'][0]['outcomes']
+                ol = next(o['price'] for o in outcomes if o['name'] == mejor_match['home_team'])
+                ov = next(o['price'] for o in outcomes if o['name'] == mejor_match['away_team'])
+                oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
+                ol_list.append(ol); oe_list.append(oe); ov_list.append(ov)
+                casas_usadas.append(bm['key'])
+            except (StopIteration, KeyError, IndexError):
                 continue
 
-            bookmakers         = match.get('bookmakers', [])
-            bookmakers_ordenados = sorted(bookmakers, key=lambda b: (0 if b['key'] in CASAS_PREFERIDAS else 1))
-            ol_list, oe_list, ov_list = [], [], []
-            casas_usadas = []
+        if not ol_list:
+            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
-            for bm in bookmakers_ordenados[:MAX_CASAS]:
-                try:
-                    outcomes = bm['markets'][0]['outcomes']
-                    ol = next(o['price'] for o in outcomes if o['name'] == match['home_team'])
-                    ov = next(o['price'] for o in outcomes if o['name'] == match['away_team'])
-                    oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
-                    ol_list.append(ol); oe_list.append(oe); ov_list.append(ov)
-                    casas_usadas.append(bm['key'])
-                except (StopIteration, KeyError, IndexError):
-                    continue
-
-            if not ol_list:
-                return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
-
-            ol_consenso = round(sum(ol_list) / len(ol_list), 3)
-            oe_consenso = round(sum(oe_list) / len(oe_list), 3)
-            ov_consenso = round(sum(ov_list) / len(ov_list), 3)
-            rango_l     = (round(min(ol_list), 3), round(max(ol_list), 3))
-            rango_v     = (round(min(ov_list), 3), round(max(ov_list), 3))
-            return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
+        ol_consenso = round(sum(ol_list) / len(ol_list), 3)
+        oe_consenso = round(sum(oe_list) / len(oe_list), 3)
+        ov_consenso = round(sum(ov_list) / len(ov_list), 3)
+        rango_l     = (round(min(ol_list), 3), round(max(ol_list), 3))
+        rango_v     = (round(min(ov_list), 3), round(max(ov_list), 3))
+        return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
 
     except Exception as e:
         logging.error(f"Error obtener_datos_mercado: {e}")
@@ -493,37 +536,51 @@ async def obtener_datos_mercado(equipo_l):
     return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
 
 
-async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a):
+async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a, equipo_v=""):
     if not ODDS_API_KEY:
         return 1.0, "O/U: Sin API"
+
+    query_l = NOMBRES_ODDS_API.get(equipo_l, equipo_l)
+    query_v = NOMBRES_ODDS_API.get(equipo_v, equipo_v)
+
     try:
         url    = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'totals'}
         r      = await asyncio.to_thread(requests.get, url, params=params, timeout=15)
         if r.status_code == 200:
+            mejor_score = 0.0
+            mejor_match = None
+
             for match in r.json():
-                home  = match['home_team'].lower()
-                query = equipo_l.lower()
-                if query in home or home in query:
-                    for bm in match['bookmakers']:
-                        for mkt in bm['markets']:
-                            if mkt['key'] == 'totals':
-                                over_price = next((o['price'] for o in mkt['outcomes'] if o['name'] == 'Over'), None)
-                                if over_price:
-                                    prob_over_mercado = 1 / over_price
-                                    prob_over_poisson = 0.0
-                                    for x in range(7):
-                                        for y in range(7):
-                                            p = poisson.pmf(x, lambda_h) * poisson.pmf(y, lambda_a) * dixon_coles_tau(x, y, lambda_h, lambda_a)
-                                            if x + y > 2:
-                                                prob_over_poisson += p
-                                    diff = prob_over_poisson - prob_over_mercado
-                                    if diff > 0.05:
-                                        return 1.2, f"O/U ✅ Confirmación ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
-                                    elif diff < -0.05:
-                                        return 0.8, f"O/U ⚠️ Contradicción ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
-                                    else:
-                                        return 1.0, f"O/U ➡️ Neutro ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
+                score_h = _similitud(query_l, match['home_team'])
+                score_a = _similitud(query_v, match['away_team']) if query_v else 1.0
+                score   = (score_h + score_a) / 2
+                if score > mejor_score:
+                    mejor_score = score
+                    mejor_match = match
+
+            if not mejor_match or mejor_score < 0.35:
+                return 1.0, "O/U: Partido no encontrado"
+
+            for bm in mejor_match['bookmakers']:
+                for mkt in bm['markets']:
+                    if mkt['key'] == 'totals':
+                        over_price = next((o['price'] for o in mkt['outcomes'] if o['name'] == 'Over'), None)
+                        if over_price:
+                            prob_over_mercado = 1 / over_price
+                            prob_over_poisson = 0.0
+                            for x in range(7):
+                                for y in range(7):
+                                    p = poisson.pmf(x, lambda_h) * poisson.pmf(y, lambda_a) * dixon_coles_tau(x, y, lambda_h, lambda_a)
+                                    if x + y > 2:
+                                        prob_over_poisson += p
+                            diff = prob_over_poisson - prob_over_mercado
+                            if diff > 0.05:
+                                return 1.2, f"O/U ✅ Confirmación ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
+                            elif diff < -0.05:
+                                return 0.8, f"O/U ⚠️ Contradicción ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
+                            else:
+                                return 1.0, f"O/U ➡️ Neutro ({prob_over_poisson*100:.0f}% vs {prob_over_mercado*100:.0f}%)"
     except Exception as e:
         logging.error(f"Error O/U: {e}")
     return 1.0, "O/U: Sin datos"
@@ -969,7 +1026,7 @@ async def handle_pronostico(message):
         tabla,
         goleadores_fd
     ) = await asyncio.gather(
-        obtener_datos_mercado(l_q),
+        obtener_datos_mercado(m_l, m_v),
         obtener_contexto_real(l_q, v_q),
         obtener_factor_calibracion(),
         obtener_forma_reciente(id_l),
@@ -1034,7 +1091,7 @@ async def handle_pronostico(message):
     prob_market_e = (prob_simple_e + shin_e) / 2
     prob_market_v = (prob_simple_v + shin_v) / 2
 
-    ou_factor, ou_texto = await obtener_confirmacion_ou(l_q, lh, la)
+    ou_factor, ou_texto = await obtener_confirmacion_ou(m_l, lh, la, m_v)
 
     margen_error   = 0.003 + (shin_z * 0.02)
     edge_local_raw = (prob_poisson_calibrado_local - prob_market_l - margen_error) * shin_factor
@@ -2009,15 +2066,20 @@ async def cmd_diagnostico(message):
     try:
         r = await asyncio.to_thread(
             requests.get,
-            "https://api.the-odds-api.com/v4/sports/",
-            params={'apiKey': ODDS_API_KEY or ''}, timeout=10
+            "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/",
+            params={'apiKey': ODDS_API_KEY or '', 'regions': 'eu', 'markets': 'h2h'},
+            timeout=10
         )
+        remaining = r.headers.get('x-requests-remaining', '?')
+        used      = r.headers.get('x-requests-used', '?')
         if r.status_code == 200:
-            resultados.append("✅ <b>Odds API</b> — OK")
+            resultados.append(f"✅ <b>Odds API</b> — OK (usadas: {used} · restantes: {remaining})")
         elif r.status_code == 401:
             resultados.append("❌ <b>Odds API</b> — API Key inválida (401)")
         elif r.status_code == 422:
             resultados.append("❌ <b>Odds API</b> — Key no configurada (422)")
+        elif r.status_code == 429:
+            resultados.append(f"⚠️ <b>Odds API</b> — Cuota agotada (429) · usadas: {used}")
         else:
             resultados.append(f"❌ <b>Odds API</b> — HTTP {r.status_code}")
     except requests.exceptions.Timeout:
