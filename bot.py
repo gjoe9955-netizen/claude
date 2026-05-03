@@ -1665,7 +1665,7 @@ PICK RIESGO (marcador): {pick_riesgo_nombre if pick_riesgo_nombre else "N/A"} ({
 ═══════════════════════════════════════
 
 INSTRUCCIONES:
-Redacta un análisis de máximo 260 palabras que integre:
+Redacta un análisis de máximo 180 palabras que integre:
 a) Por qué el pick tiene o no valor (edge vs margen dinámico).
 b) Shin vs normalización simple: convergencia o divergencia.
 c) Forma reciente y tabla: refuerzan o contradicen el pronóstico.
