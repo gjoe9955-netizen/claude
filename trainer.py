@@ -408,8 +408,8 @@ def obtener_tarjetas_por_partido(event_id: int) -> dict:
         tarjetas = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
         for inc in incidents:
             tipo = str(inc.get("incidentType", "")).lower()
-            if "card" not in tipo:
-                continue
+            if tipo != "card":
+               continue
             color     = str(inc.get("incidentClass", "")).lower()
             nombre_eq = inc.get("team", {}).get("name", "")
             if not nombre_eq:
