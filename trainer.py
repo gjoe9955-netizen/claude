@@ -393,35 +393,34 @@ def obtener_eventos_laliga_rapid(season_id: int) -> list:
 def obtener_tarjetas_por_partido(event_id: int) -> dict:
     if not RAPIDAPI_KEY:
         return {}
-
     try:
         url = f"https://{RAPIDAPI_HOST}/api/v1/event/{event_id}/incidents"
         r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
+        print(f"   [DEBUG] event {event_id} → HTTP {r.status_code}")
         if r.status_code != 200:
+            print(f"   [DEBUG] response: {r.text[:300]}")
             return {}
-
-        incidents = r.json().get("incidents", [])
-        tarjetas  = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
-
+        data      = r.json()
+        incidents = data.get("incidents", [])
+        print(f"   [DEBUG] incidents recibidos: {len(incidents)}")
+        if incidents:
+            print(f"   [DEBUG] ejemplo: {json.dumps(incidents[0], ensure_ascii=False)[:300]}")
+        tarjetas = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
         for inc in incidents:
             tipo = str(inc.get("incidentType", "")).lower()
             if "card" not in tipo:
                 continue
-
-            color       = str(inc.get("incidentClass", "")).lower()
-            equipo_info = inc.get("team", {})
-            nombre_eq   = equipo_info.get("name", "")
+            color     = str(inc.get("incidentClass", "")).lower()
+            nombre_eq = inc.get("team", {}).get("name", "")
             if not nombre_eq:
                 continue
-
             if "yellow" in color or "yellow" in tipo:
                 tarjetas[nombre_eq]["amarillas"] += 1
             elif "red" in color or "red" in tipo:
                 tarjetas[nombre_eq]["rojas"] += 1
-
         return dict(tarjetas)
-
-    except Exception:
+    except Exception as e:
+        print(f"   [DEBUG] excepción event {event_id}: {e}")
         return {}
 
 
