@@ -37,6 +37,8 @@ URL_JSON      = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/
 REPO_OWNER    = "gjoe9955-netizen"
 REPO_NAME     = "claude"
 FILE_PATH     = "historial.json"
+ELO_FILE_PATH    = "elo_cache.json"
+CONFIG_FILE_PATH = "config_ia.json"
 
 # ID de LaLiga en SportAPI7
 LALIGA_TOURNAMENT_ID = 8
@@ -416,6 +418,81 @@ async def guardar_en_github(nuevo_registro=None, historial_completo=None):
 
     except Exception as e:
         logging.error(f"Error GitHub: {e}", exc_info=True)
+
+
+async def _github_get(file_path: str) -> tuple:
+    """Lee un archivo de GitHub. Retorna (contenido_dict, sha) o (None, None)."""
+    url     = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        r = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            contenido = json.loads(base64.b64decode(data['content'].replace('\n', '')).decode('utf-8'))
+            return contenido, data.get('sha')
+        elif r.status_code == 404:
+            return None, None
+    except Exception as e:
+        logging.error(f"[GitHub GET] {file_path}: {e}")
+    return None, None
+
+
+async def _github_put(file_path: str, contenido: dict, sha: str = None, mensaje: str = "🤖 Update"):
+    """Escribe un archivo en GitHub."""
+    url     = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    payload = {
+        "message": mensaje,
+        "content": base64.b64encode(json.dumps(contenido, indent=2, ensure_ascii=False).encode()).decode()
+    }
+    if sha:
+        payload["sha"] = sha
+    try:
+        r = await asyncio.to_thread(requests.put, url, headers=headers, json=payload, timeout=15)
+        if r.status_code not in (200, 201):
+            logging.error(f"[GitHub PUT] {file_path}: HTTP {r.status_code}")
+            return False
+        return True
+    except Exception as e:
+        logging.error(f"[GitHub PUT] {file_path}: {e}")
+        return False
+
+
+async def guardar_elo_github(elos: dict):
+    """Persiste el cache de Elo en GitHub."""
+    contenido, sha = await _github_get(ELO_FILE_PATH)
+    payload = {"ts": datetime.now(timezone.utc).isoformat(), "elos": {str(k): v for k, v in elos.items()}}
+    await _github_put(ELO_FILE_PATH, payload, sha, "🤖 Elo cache update")
+
+
+async def cargar_elo_github() -> dict:
+    """Carga el cache de Elo desde GitHub. Retorna dict vacío si no existe."""
+    contenido, _ = await _github_get(ELO_FILE_PATH)
+    if contenido and "elos" in contenido:
+        return {int(k): v for k, v in contenido["elos"].items()}
+    return {}
+
+
+async def guardar_config_github():
+    """Persiste la config de nodos IA en GitHub."""
+    _, sha = await _github_get(CONFIG_FILE_PATH)
+    payload = {
+        "estratega": SISTEMA_IA["estratega"],
+        "auditor":   SISTEMA_IA["auditor"]
+    }
+    await _github_put(CONFIG_FILE_PATH, payload, sha, "🤖 Config IA update")
+
+
+async def cargar_config_github():
+    """Carga la config de nodos IA desde GitHub al arranque."""
+    contenido, _ = await _github_get(CONFIG_FILE_PATH)
+    if contenido:
+        if contenido.get("estratega", {}).get("nodo"):
+            SISTEMA_IA["estratega"] = contenido["estratega"]
+            logging.info(f"[Config] Estratega cargado: {SISTEMA_IA['estratega']['nodo']}")
+        if contenido.get("auditor", {}).get("nodo"):
+            SISTEMA_IA["auditor"] = contenido["auditor"]
+            logging.info(f"[Config] Auditor cargado: {SISTEMA_IA['auditor']['nodo']}")
 
 
 # --- Estado Global IA ---
@@ -842,7 +919,15 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
     if not tabla:
         return {}
 
-    elos: dict = {tid: 1500.0 for tid in tabla}
+    # Intentar cargar desde GitHub primero
+    elos_github = await cargar_elo_github()
+    elos: dict  = elos_github if elos_github else {tid: 1500.0 for tid in tabla}
+
+    # Asegurar que todos los equipos de la tabla tienen entrada
+    for tid in tabla:
+        if tid not in elos:
+            elos[tid] = 1500.0
+
     K       = 32
     matches = await obtener_partidos_finished()
 
@@ -873,6 +958,10 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
 
     _ELO_CACHE["data"] = elos
     _ELO_CACHE["ts"]   = ahora
+
+    # Guardar en GitHub en background
+    asyncio.create_task(guardar_elo_github(elos))
+
     return elos
 
 
@@ -1217,11 +1306,44 @@ async def handle_pronostico(message):
         fuente_txt  = f"{partidos_ok}p analizados" if partidos_ok > 0 else "fallback liga"
         return f"🟨 {t['avg_amarillas']:.1f} amarillas · 🟥 {t['avg_rojas']:.1f} rojas/partido ({fuente_txt})"
 
+    # ── Cálculo Poisson de tarjetas ────────────────────────────
+    lam_am_l = tarj_l['avg_amarillas']
+    lam_am_v = tarj_v['avg_amarillas']
+    lam_ro_l = tarj_l['avg_rojas']
+    lam_ro_v = tarj_v['avg_rojas']
+
+    # Probabilidad de recibir al menos 1 amarilla (primera tarjeta)
+    prob_am_l = round((1 - poisson.pmf(0, lam_am_l)) * 100, 1)
+    prob_am_v = round((1 - poisson.pmf(0, lam_am_v)) * 100, 1)
+
+    # Equipo más propenso a la primera amarilla
+    equipo_propenso_am = m_l if prob_am_l >= prob_am_v else m_v
+    prob_propenso_am   = max(prob_am_l, prob_am_v)
+
+    # Probabilidad de primera roja
+    prob_ro_l = round((1 - poisson.pmf(0, lam_ro_l)) * 100, 1)
+    prob_ro_v = round((1 - poisson.pmf(0, lam_ro_v)) * 100, 1)
+    equipo_propenso_ro = m_l if prob_ro_l >= prob_ro_v else m_v
+
+    # Over/Under tarjetas amarillas totales
+    lam_am_total = lam_am_l + lam_am_v
+    prob_over3_5_am = round(sum(
+        poisson.pmf(k, lam_am_total) for k in range(4, 20)
+    ) * 100, 1)
+    prob_over4_5_am = round(sum(
+        poisson.pmf(k, lam_am_total) for k in range(5, 20)
+    ) * 100, 1)
+
     tarjetas_block = (
         f"\n<b>◆ TARJETAS ESPERADAS</b>\n"
         f"<b>🏠 {html.escape(m_l)}:</b> {_fmt_tarjetas(tarj_l, 'local')}\n"
         f"<b>🚩 {html.escape(m_v)}:</b> {_fmt_tarjetas(tarj_v, 'visita')}\n"
-        f"<i>Total partido: ~{tarj_l['avg_amarillas'] + tarj_v['avg_amarillas']:.1f} amarillas · ~{tarj_l['avg_rojas'] + tarj_v['avg_rojas']:.1f} rojas</i>\n"
+        f"<i>Total partido: ~{lam_am_total:.1f} amarillas · ~{lam_ro_l+lam_ro_v:.1f} rojas</i>\n"
+        f"<code>"
+        f"1ª Amarilla  🏠 {prob_am_l}%  🚩 {prob_am_v}%  → {html.escape(equipo_propenso_am)} más propenso\n"
+        f"1ª Roja      🏠 {prob_ro_l}%  🚩 {prob_ro_v}%  → {html.escape(equipo_propenso_ro)} más propenso\n"
+        f"Over 3.5 AM  {prob_over3_5_am}%  |  Over 4.5 AM  {prob_over4_5_am}%"
+        f"</code>\n"
     )
 
     def _fmt_goleadores(lista: list) -> str:
@@ -1379,10 +1501,13 @@ PARTIDO: {m_l} vs {m_v}
 • {serper_txt}
 • {contexto_noticias[:800]}
 
-── TARJETAS PROMEDIO ──
-• {m_l}: {tarj_l['avg_amarillas']:.1f} amarillas | {tarj_l['avg_rojas']:.1f} rojas/partido ({tarj_l.get('partidos_analizados',0)} partidos)
-• {m_v}: {tarj_v['avg_amarillas']:.1f} amarillas | {tarj_v['avg_rojas']:.1f} rojas/partido ({tarj_v.get('partidos_analizados',0)} partidos)
-• Total partido esperado: {tarj_l['avg_amarillas']+tarj_v['avg_amarillas']:.1f} amarillas | {tarj_l['avg_rojas']+tarj_v['avg_rojas']:.1f} rojas
+── TARJETAS (POISSON) ──
+• {m_l}: λ={lam_am_l:.1f} amarillas | λ={lam_ro_l:.1f} rojas ({tarj_l.get('partidos_analizados',0)} partidos)
+• {m_v}: λ={lam_am_v:.1f} amarillas | λ={lam_ro_v:.1f} rojas ({tarj_v.get('partidos_analizados',0)} partidos)
+• Total partido λ={lam_am_total:.1f} amarillas
+• 1ª Amarilla: {m_l} {prob_am_l}% | {m_v} {prob_am_v}% → MÁS PROPENSO: {equipo_propenso_am}
+• 1ª Roja:     {m_l} {prob_ro_l}% | {m_v} {prob_ro_v}% → MÁS PROPENSO: {equipo_propenso_ro}
+• Over 3.5 amarillas: {prob_over3_5_am}% | Over 4.5 amarillas: {prob_over4_5_am}%
 
 ── GOLEADORES PROBABLES (FD Scorers + Lineup) ──
 • {m_l}: {gol_local_txt}
@@ -1401,8 +1526,8 @@ b) Shin vs normalización simple: convergencia o divergencia.
 c) Forma reciente y tabla: refuerzan o contradicen el pronóstico.
 d) H2H histórico: tamaño de muestra y dirección.
 e) Bajas detectadas y su impacto en lambdas.
-f) Over/Under: confirma o contradice la dirección.
-g) Tarjetas esperadas: si el partido apunta a ser tenso o fluido.
+f) Over/Under goles: confirma o contradice la dirección.
+g) Tarjetas: qué equipo es más propenso a la primera amarilla/roja, si Over 3.5 o 4.5 amarillas tiene valor, y si el partido apunta a ser tenso o fluido según los lambdas.
 h) Goleador más probable si hay dato disponible.
 Sé directo, técnico y conciso. No repitas los números del header, interprétalos.
 """
@@ -1580,18 +1705,25 @@ async def cmd_validar(message):
         for item in historial_raw:
             if item.get("status") != "⏳ PENDIENTE":
                 continue
-            partido_lower = item['partido'].lower()
+            partes = item['partido'].split(" vs ")
+            if len(partes) != 2:
+                continue
+            nombre_l = partes[0].strip().lower()
+            nombre_v = partes[1].strip().lower()
+
             for m in data_api['matches']:
-                h_api = m['homeTeam']['name'].lower()
-                a_api = m['awayTeam']['name'].lower()
-                if any(p in h_api or h_api in p for p in partido_lower.split(" vs ")[0:1]) and \
-                   any(p in a_api or a_api in p for p in partido_lower.split(" vs ")[1:2]):
+                h_api  = m['homeTeam']['name']
+                a_api  = m['awayTeam']['name']
+                score_h = _similitud(nombre_l, h_api)
+                score_a = _similitud(nombre_v, a_api)
+                if score_h >= 0.40 and score_a >= 0.40:
                     winner = m['score'].get('winner')
                     if not winner:
                         continue
-                    item['status']       = evaluar_resultado(item['pick'], item['partido'], h_api, a_api, winner)
+                    item['status']        = evaluar_resultado(item['pick'], item['partido'], h_api.lower(), a_api.lower(), winner)
                     item['marcador_real'] = f"{m['score']['fullTime']['home']}-{m['score']['fullTime']['away']}"
                     count += 1
+                    logging.info(f"[Validar] ✅ {item['partido']} → {item['status']} ({h_api} vs {a_api})")
                     break
 
         if count > 0:
@@ -1738,6 +1870,7 @@ async def cb_save(call):
     lista   = SISTEMA_IA["nodos_groq"] if api == "GROQ" else SISTEMA_IA["nodos_samba"]
     nodo_sel = lista[int(idx)]
     SISTEMA_IA[rol] = {"api": api, "nodo": nodo_sel}
+    asyncio.create_task(guardar_config_github())
     markup  = InlineKeyboardMarkup()
     if rol == "estratega":
         markup.add(InlineKeyboardButton("⚖️ AÑADIR AUDITOR", callback_data="set_rol_auditor"))
@@ -1768,9 +1901,13 @@ async def obtener_partido_inplay(l_q: str, v_q: str):
     return None
 
 
-async def obtener_cuotas_live(l_q: str):
+async def obtener_cuotas_live(l_q: str, v_q: str = ""):
     if not ODDS_API_KEY:
         return None, None, None, "sin_api", None
+
+    query_l = NOMBRES_ODDS_API.get(l_q, l_q)
+    query_v = NOMBRES_ODDS_API.get(v_q, v_q)
+
     try:
         url    = "https://api.the-odds-api.com/v4/sports/soccer_spain_la_liga/odds/"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'eu', 'markets': 'h2h'}
@@ -1778,39 +1915,51 @@ async def obtener_cuotas_live(l_q: str):
         if r.status_code != 200:
             return None, None, None, "error_api", None
 
-        ahora = datetime.now(timezone.utc)
+        ahora        = datetime.now(timezone.utc)
+        mejor_score  = 0.0
+        mejor_match  = None
+
         for match in r.json():
-            h = match['home_team'].lower()
-            if not (l_q.lower() in h or h in l_q.lower()):
-                continue
-            bms = match.get('bookmakers', [])
-            if not bms:
-                continue
+            score_h = _similitud(query_l, match['home_team'])
+            score_a = _similitud(query_v, match['away_team']) if query_v else 1.0
+            score   = (score_h + score_a) / 2
+            if score > mejor_score:
+                mejor_score = score
+                mejor_match = match
+
+        if not mejor_match or mejor_score < 0.35:
+            logging.warning(f"[Live Odds] Partido no encontrado: '{query_l}' vs '{query_v}' (score={mejor_score:.2f})")
+            return None, None, None, "sin_datos", None
+
+        bms = mejor_match.get('bookmakers', [])
+        if not bms:
+            return None, None, None, "sin_datos", None
+
+        try:
+            ts        = datetime.fromisoformat(bms[0].get('last_update', '').replace('Z', '+00:00'))
+            delay_min = (ahora - ts).total_seconds() / 60
+        except:
+            delay_min = 999
+
+        ol_list, oe_list, ov_list = [], [], []
+        for bm in bms[:6]:
             try:
-                ts        = datetime.fromisoformat(bms[0].get('last_update', '').replace('Z', '+00:00'))
-                delay_min = (ahora - ts).total_seconds() / 60
+                outcomes = bm['markets'][0]['outcomes']
+                ol = next(o['price'] for o in outcomes if o['name'] == mejor_match['home_team'])
+                ov = next(o['price'] for o in outcomes if o['name'] == mejor_match['away_team'])
+                oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
+                ol_list.append(ol); oe_list.append(oe); ov_list.append(ov)
             except:
-                delay_min = 999
-
-            ol_list, oe_list, ov_list = [], [], []
-            for bm in bms[:6]:
-                try:
-                    outcomes = bm['markets'][0]['outcomes']
-                    ol = next(o['price'] for o in outcomes if o['name'] == match['home_team'])
-                    ov = next(o['price'] for o in outcomes if o['name'] == match['away_team'])
-                    oe = next(o['price'] for o in outcomes if o['name'] == 'Draw')
-                    ol_list.append(ol); oe_list.append(oe); ov_list.append(ov)
-                except:
-                    continue
-
-            if not ol_list:
                 continue
 
-            c_l  = round(sum(ol_list)/len(ol_list), 3)
-            c_e  = round(sum(oe_list)/len(oe_list), 3)
-            c_v  = round(sum(ov_list)/len(ov_list), 3)
-            tipo = "live" if delay_min < 12 else "pre-partido"
-            return c_l, c_e, c_v, tipo, round(delay_min, 1)
+        if not ol_list:
+            return None, None, None, "sin_datos", None
+
+        c_l  = round(sum(ol_list)/len(ol_list), 3)
+        c_e  = round(sum(oe_list)/len(oe_list), 3)
+        c_v  = round(sum(ov_list)/len(ov_list), 3)
+        tipo = "live" if delay_min < 12 else "pre-partido"
+        return c_l, c_e, c_v, tipo, round(delay_min, 1)
 
     except Exception as e:
         logging.error(f"[Live Odds] Error: {e}")
@@ -1944,7 +2093,7 @@ async def _ejecutar_live(chat_id, msg_id, l_q, v_q, m_l, m_v, goles_local, goles
     avg     = full_data[liga]['averages']
     lh_base, la_base = calcular_lambdas_base(l_s, v_s, avg)
 
-    c_l, c_e, c_v, tipo_cuota, delay_min = await obtener_cuotas_live(l_q)
+    c_l, c_e, c_v, tipo_cuota, delay_min = await obtener_cuotas_live(eq_l, eq_v)
     if not c_l:
         c_l, c_e, c_v = 1.85, 3.50, 4.00
         tipo_cuota    = "default"
@@ -2280,6 +2429,13 @@ async def main():
     await asyncio.sleep(1)
     await bot.set_webhook(url=WEBHOOK_URL)
     logging.info(f"[Arranque] Webhook: {WEBHOOK_URL}")
+
+    logging.info("[Arranque] Cargando config IA desde GitHub...")
+    await cargar_config_github()
+    if SISTEMA_IA["estratega"]["nodo"]:
+        logging.info(f"[Arranque] ✅ Estratega: {SISTEMA_IA['estratega']['nodo']}")
+    else:
+        logging.info("[Arranque] ⚠️ Estratega no configurado — usa /config")
 
     logging.info("[Arranque] Precalentando cache FINISHED...")
     await obtener_partidos_finished()
