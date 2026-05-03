@@ -322,7 +322,7 @@ def obtener_tarjetas_por_partido(event_id: int) -> dict:
         # DEBUG: muestra el primer incident de tipo 'card' completo (solo primer partido)
         for inc in incidents:
             if inc.get("incidentType") == "card":
-                print(f"   [DEBUG] card ejemplo: {json.dumps(inc, ensure_ascii=False)[:400]}")
+                print(f"   [DEBUG] card ejemplo: {json.dumps(inc, ensure_ascii=False)[:800]}")
                 break
 
         tarjetas = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
