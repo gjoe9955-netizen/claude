@@ -10,54 +10,14 @@ from datetime import datetime
 from understat import Understat
 
 API_KEY         = os.getenv("FOOTBALL_DATA_API_KEY")
-RAPIDAPI_KEY    = os.getenv("RAPIDAPI_KEY")
-RAPIDAPI_HOST   = "sportapi7.p.rapidapi.com"
 
 BASE_URL = "https://api.football-data.org/v4/competitions/PD/matches?status=FINISHED"
 HEADERS  = {"X-Auth-Token": API_KEY}
-RAPID_HEADERS = {
-    "X-RapidAPI-Key":  RAPIDAPI_KEY,
-    "X-RapidAPI-Host": RAPIDAPI_HOST
-}
-
 TIME_DECAY_LAMBDA = 0.007
 XG_WEIGHT         = 0.6
 
 EQUIPOS_SIN_UNDERSTAT = {"levante", "oviedo", "valladolid"}
-LALIGA_TOURNAMENT_ID  = 8
 
-EXCEPCIONES_FD_A_RAPID = {
-    "club atlético de madrid"   : "Atlético Madrid",
-    "club atletico de madrid"   : "Atlético Madrid",
-    "rc celta de vigo"          : "Celta Vigo",
-    "real betis balompié"       : "Real Betis",
-    "real betis balompie"       : "Real Betis",
-    "ca osasuna"                : "Osasuna",
-    "rayo vallecano de madrid"  : "Rayo Vallecano",
-    "real sociedad de fútbol"   : "Real Sociedad",
-    "real sociedad de futbol"   : "Real Sociedad",
-    "rcd mallorca"              : "Mallorca",
-    "rcd espanyol de barcelona" : "Espanyol",
-    "ud las palmas"             : "Las Palmas",
-    "real valladolid cf"        : "Valladolid",
-    "cd leganés"                : "Leganés",
-    "cd leganes"                : "Leganés",
-    "deportivo alavés"          : "Deportivo Alavés",
-    "deportivo alaves"          : "Deportivo Alavés",
-    "levante ud"                : "Levante UD",
-    "real oviedo"               : "Real Oviedo",
-    "villarreal cf"             : "Villarreal",
-    "getafe cf"                 : "Getafe",
-    "girona fc"                 : "Girona FC",
-    "sevilla fc"                : "Sevilla",
-    "valencia cf"               : "Valencia",
-    "athletic club"             : "Athletic Club",
-    "fc barcelona"              : "FC Barcelona",
-    "real madrid cf"            : "Real Madrid",
-    "ud almería"                : "Almería",
-    "ud almeria"                : "Almería",
-    "elche cf"                  : "Elche",
-}
 
 
 def descargar_partidos_football_data() -> list:
@@ -188,221 +148,11 @@ def normalizar_nombre(nombre_fd: str) -> str:
     return NOMBRE_FD_A_US.get(key, key)
 
 
-def obtener_season_id_laliga() -> int:
-    SEASON_ID_FALLBACK = 61643
-    if not RAPIDAPI_KEY:
-        return SEASON_ID_FALLBACK
-    try:
-        url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/seasons"
-        r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
-        if r.status_code == 200:
-            seasons = r.json().get("seasons", [])
-            if seasons:
-                season_id = seasons[0].get("id", SEASON_ID_FALLBACK)
-                print(f"   ✅ SportAPI7 season ID LaLiga: {season_id} ({seasons[0].get('name', '')})")
-                return season_id
-    except Exception as e:
-        print(f"   ⚠️  Error obteniendo season ID: {e}. Usando fallback {SEASON_ID_FALLBACK}.")
-    return SEASON_ID_FALLBACK
 
 
-def _similitud(a: str, b: str) -> float:
-    palabras_a = set(a.lower().split())
-    palabras_b = set(b.lower().split())
-    stopwords  = {"fc", "cf", "ud", "cd", "rc", "rcd", "ca", "de", "la", "el", "los", "club"}
-    palabras_a -= stopwords
-    palabras_b -= stopwords
-    if not palabras_a or not palabras_b:
-        return 0.0
-    comunes = palabras_a & palabras_b
-    return len(comunes) / max(len(palabras_a), len(palabras_b))
 
 
-def construir_mapeo_rapid(equipos_fd: list, equipos_rapid: list) -> dict:
-    mapeo     = {}
-    sin_match = []
-    for nombre_fd in equipos_fd:
-        key_fd = nombre_fd.strip().lower()
-        if key_fd in EXCEPCIONES_FD_A_RAPID:
-            mapeo[key_fd] = EXCEPCIONES_FD_A_RAPID[key_fd]
-            continue
-        mejor_score  = 0.0
-        mejor_nombre = None
-        for nombre_r in equipos_rapid:
-            score = _similitud(nombre_fd, nombre_r)
-            if score > mejor_score:
-                mejor_score  = score
-                mejor_nombre = nombre_r
-        if mejor_score >= 0.5 and mejor_nombre:
-            mapeo[key_fd] = mejor_nombre
-        else:
-            sin_match.append(nombre_fd)
-            mapeo[key_fd] = nombre_fd
-    if sin_match:
-        print(f"   ⚠️  Sin match en SportAPI7 para: {sin_match}")
-    return mapeo
 
-
-def obtener_equipos_rapid_laliga(season_id: int) -> list:
-    import time
-    if not RAPIDAPI_KEY:
-        return []
-    equipos = set()
-    time.sleep(2)  # delay antes de standings
-    try:
-        url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/season/{season_id}/standings/total"
-        r   = requests.get(url, headers=RAPID_HEADERS, timeout=15)
-        if r.status_code == 200:
-            rows = r.json().get("standings", [{}])[0].get("rows", [])
-            for row in rows:
-                nombre = row.get("team", {}).get("name", "")
-                if nombre:
-                    equipos.add(nombre)
-            if equipos:
-                print(f"   ✅ SportAPI7 standings: {len(equipos)} equipos obtenidos (season {season_id}).")
-                return list(equipos)
-        else:
-            print(f"   ⚠️  SportAPI7 standings HTTP {r.status_code} para season {season_id}.")
-    except Exception as e:
-        print(f"   ⚠️  Error standings SportAPI7: {e}")
-    try:
-        fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-        url = f"https://{RAPIDAPI_HOST}/api/v1/sport/football/scheduled-events/{fecha_hoy}"
-        r   = requests.get(url, headers=RAPID_HEADERS, timeout=15)
-        if r.status_code == 200:
-            for ev in r.json().get("events", []):
-                if ev.get("tournament", {}).get("uniqueTournament", {}).get("id") == LALIGA_TOURNAMENT_ID:
-                    equipos.add(ev.get("homeTeam", {}).get("name", ""))
-                    equipos.add(ev.get("awayTeam", {}).get("name", ""))
-            equipos.discard("")
-            print(f"   ✅ SportAPI7 fallback: {len(equipos)} equipos obtenidos.")
-    except Exception as e:
-        print(f"   ⚠️  Error fallback SportAPI7: {e}")
-    return list(equipos)
-
-
-def obtener_eventos_laliga_rapid(season_id: int) -> list:
-    if not RAPIDAPI_KEY:
-        return []
-    eventos = []
-    try:
-        for ronda in range(33, 38):
-            url = f"https://{RAPIDAPI_HOST}/api/v1/unique-tournament/{LALIGA_TOURNAMENT_ID}/season/{season_id}/events/round/{ronda}"
-            r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
-            if r.status_code == 200:
-                for ev in r.json().get("events", []):
-                    if ev.get("status", {}).get("type") == "finished":
-                        eventos.append({
-                            "id":   ev["id"],
-                            "home": ev.get("homeTeam", {}).get("name", ""),
-                            "away": ev.get("awayTeam", {}).get("name", "")
-                        })
-            import time; time.sleep(1.5)
-        print(f"   ✅ SportAPI7 eventos LaLiga: {len(eventos)} partidos terminados encontrados.")
-    except Exception as e:
-        print(f"   ⚠️  Error obteniendo eventos LaLiga: {e}")
-    return eventos
-
-
-def obtener_tarjetas_por_partido(event_id: int, home_name: str = "", away_name: str = "") -> dict:
-    """
-    Obtiene tarjetas por equipo en un partido.
-    SportAPI7 no devuelve team.name en incidents — usa isHome (bool) para
-    asignar la tarjeta al equipo local (home_name) o visitante (away_name).
-    """
-    if not RAPIDAPI_KEY:
-        return {}
-    try:
-        url = f"https://{RAPIDAPI_HOST}/api/v1/event/{event_id}/incidents"
-        r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
-
-        if r.status_code == 429:
-            print(f"   ⚠️  Rate limit (429) — cuota agotada, abortando incidents.")
-            return None  # señal para abortar el loop
-        if r.status_code != 200:
-            print(f"   [DEBUG] event {event_id} → HTTP {r.status_code}: {r.text[:150]}")
-            return {}
-
-        incidents = r.json().get("incidents", [])
-        tarjetas  = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
-
-        for inc in incidents:
-            if inc.get("incidentType") != "card":
-                continue
-            card_type      = str(inc.get("cardType", "")).lower()
-            incident_class = str(inc.get("incidentClass", "")).lower()
-            is_home = inc.get("isHome")
-
-            # Determinar equipo por isHome
-            if is_home is True and home_name:
-                nombre_eq = home_name
-            elif is_home is False and away_name:
-                nombre_eq = away_name
-            else:
-                # Fallback: intentar team.name si existe
-                nombre_eq = inc.get("team", {}).get("name", "")
-
-            if not nombre_eq:
-                continue
-
-            if "yellowred" in card_type or "yellowred" in incident_class:
-                tarjetas[nombre_eq]["rojas"] += 1  # doble amarilla = roja
-            elif "yellow" in card_type or "yellow" in incident_class:
-                tarjetas[nombre_eq]["amarillas"] += 1
-            elif "red" in card_type or "red" in incident_class:
-                tarjetas[nombre_eq]["rojas"] += 1
-
-        return dict(tarjetas)
-
-    except Exception as e:
-        print(f"   [DEBUG] excepción event {event_id}: {e}")
-        return {}
-
-
-def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: list) -> dict:
-    acum             = defaultdict(lambda: {"amarillas": [], "rojas": []})
-    total_eventos    = len(eventos)
-    eventos_ok       = 0
-    eventos_sin_data = 0
-    print(f"   Procesando incidents de {total_eventos} partidos...")
-    import time
-    for i, ev in enumerate(eventos):
-        # Pasar home/away del evento para resolver tarjetas por isHome
-        tarjetas = obtener_tarjetas_por_partido(ev["id"], ev.get("home", ""), ev.get("away", ""))
-        if tarjetas is None:  # cuota agotada — abortar
-            print(f"   ⚠️  Abortando — cuota RapidAPI agotada.")
-            break
-        if tarjetas:
-            eventos_ok += 1
-            for nombre_eq, datos in tarjetas.items():
-                acum[nombre_eq]["amarillas"].append(datos["amarillas"])
-                acum[nombre_eq]["rojas"].append(datos["rojas"])
-        else:
-            eventos_sin_data += 1
-        if (i + 1) % 5 == 0:
-            time.sleep(2)
-        else:
-            time.sleep(1)
-    print(f"   ✅ Incidents procesados: {eventos_ok} OK | {eventos_sin_data} sin data")
-    resultado = {}
-    for nombre_fd in equipos_fd:
-        key_fd     = nombre_fd.strip().lower()
-        nombre_rap = mapeo_rapid.get(key_fd, nombre_fd)
-        datos_rap  = acum.get(nombre_rap)
-        if not datos_rap or not datos_rap["amarillas"]:
-            for k, v in acum.items():
-                if _similitud(nombre_rap, k) >= 0.6 and v["amarillas"]:
-                    datos_rap = v
-                    break
-        if datos_rap and datos_rap["amarillas"]:
-            resultado[nombre_fd] = {
-                "avg_amarillas":       round(float(np.mean(datos_rap["amarillas"])), 2),
-                "avg_rojas":           round(float(np.mean(datos_rap["rojas"])), 2),
-                "partidos_analizados": len(datos_rap["amarillas"])
-            }
-        else:
-            resultado[nombre_fd] = {"avg_amarillas": 2.1, "avg_rojas": 0.1, "partidos_analizados": 0}
-    return resultado
 
 
 def construir_h2h(matches_raw: list, xg_understat: dict) -> dict:
@@ -441,10 +191,6 @@ def train_spain():
     if not API_KEY:
         print("❌ ERROR: No se encontró FOOTBALL_DATA_API_KEY.")
         return
-
-    usar_rapid = bool(RAPIDAPI_KEY)
-    if not usar_rapid:
-        print("⚠️  RAPIDAPI_KEY no encontrada. Se omitirán las tarjetas.")
 
     try:
         print(f"Consultando LaLiga | λ={TIME_DECAY_LAMBDA} | xG weight={XG_WEIGHT}...")
@@ -523,27 +269,24 @@ def train_spain():
                 "att_a": float(att_a), "def_a": float(def_a)
             }
 
+        # Tarjetas: se preservan del modelo anterior (actualizadas por cards.py)
         tarjetas_data = {}
-        if usar_rapid:
-            print("Obteniendo tarjetas desde SportAPI7...")
-            season_id     = obtener_season_id_laliga()
-            equipos_rapid = obtener_equipos_rapid_laliga(season_id)
-            if equipos_rapid:
-                mapeo_rapid = construir_mapeo_rapid(equipos_fd, equipos_rapid)
-                print(f"   ✅ Mapeo construido para {len(mapeo_rapid)} equipos.")
-                eventos = obtener_eventos_laliga_rapid(season_id)
-                if eventos:
-                    tarjetas_data = calcular_tarjetas_promedio(equipos_fd, mapeo_rapid, eventos)
-                    print(f"   ✅ Tarjetas calculadas para {len(tarjetas_data)} equipos.")
-                else:
-                    print("   ⚠️  Sin eventos de SportAPI7. Tarjetas omitidas.")
-            else:
-                print("   ⚠️  No se obtuvieron equipos de SportAPI7. Tarjetas omitidas.")
+        if os.path.exists('modelo_poisson.json'):
+            try:
+                with open('modelo_poisson.json', 'r', encoding='utf-8') as f_prev:
+                    modelo_prev = json.load(f_prev)
+                liga_prev = next(iter(modelo_prev))
+                for nombre_fd, stats_prev in modelo_prev[liga_prev].get('teams', {}).items():
+                    if 'tarjetas' in stats_prev:
+                        tarjetas_data[nombre_fd] = stats_prev['tarjetas']
+                print(f"   ✅ Tarjetas preservadas: {len(tarjetas_data)} equipos del modelo anterior.")
+            except Exception as e:
+                print(f"   ⚠️  No se pudieron preservar tarjetas: {e}")
 
         for team in teams_stats:
-            teams_stats[team]["tarjetas"] = tarjetas_data.get(team, {
+            teams_stats[team]["tarjetas"] = tarjetas_data.get(team) or {
                 "avg_amarillas": 2.1, "avg_rojas": 0.1, "partidos_analizados": 0
-            })
+            }
 
         print("Construyendo sección H2H...")
         h2h_data = construir_h2h(matches, xg_understat)
@@ -571,14 +314,14 @@ def train_spain():
         with open('modelo_poisson.json', 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=4, ensure_ascii=False)
 
-        print(f"\n✅ modelo_poisson.json actualizado (v4.2).")
+        print(f"\n✅ modelo_poisson.json actualizado (v4.3).")
         print(f"   Equipos:               {len(teams_stats)}")
         print(f"   Partidos totales:      {len(goles)}")
         print(f"   Con xG:                {partidos_con_xg}")
         print(f"   Sin xG (mapeo):        {partidos_sin_xg}")
         print(f"   Sin Understat:         {partidos_sin_understat} (Levante/Oviedo/Valladolid — normal)")
         print(f"   Pares H2H:             {len(h2h_data)}")
-        print(f"   Equipos con tarjetas:  {output['meta']['tarjetas_con_data']}")
+        print(f"   Equipos con tarjetas:  {output['meta']['tarjetas_con_data']} (preservadas de cards.py)")
 
     except Exception as e:
         print(f"❌ Error crítico: {e}")
