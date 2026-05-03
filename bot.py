@@ -320,60 +320,68 @@ async def obtener_contexto_real(l_q, v_q):
     if not SERPER_KEY:
         return "No hay API Key de Serper configurada.", 1.0, 1.0
 
-    url   = "https://google.serper.dev/search"
-    query = f'(site:jornadaperfecta.com OR site:futbolfantasy.com) "{l_q}" "{v_q}" alineación'
-    payload = json.dumps({"q": query, "gl": "es", "hl": "es", "tbs": "qdr:w"})
+    url     = "https://google.serper.dev/search"
     headers = {'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json'}
 
-    try:
-        r   = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=15)
-        res = r.json().get('organic', [])
+    # Query principal: partido + bajas/lesiones (sin restricción de sitio)
+    query_principal = f'"{l_q}" "{v_q}" (baja OR lesión OR lesionado OR alineación OR ausente OR sancionado)'
+    # Query de fallback: solo los equipos + noticias recientes
+    query_fallback  = f'"{l_q}" "{v_q}" noticias LaLiga'
 
-        if not res:
-            return "No se encontraron noticias recientes.", 1.0, 1.0
+    res = []
+    for query in [query_principal, query_fallback]:
+        payload = json.dumps({"q": query, "gl": "es", "hl": "es", "tbs": "qdr:w", "num": 5})
+        try:
+            r   = await asyncio.to_thread(requests.post, url, headers=headers, data=payload, timeout=15)
+            res = r.json().get('organic', [])
+            logging.info(f"[Serper] Query='{query}' → {len(res)} resultados")
+            if res:
+                break  # con resultados, no necesitamos fallback
+        except Exception as e:
+            logging.error(f"[Serper] Error query='{query}': {e}")
 
-        urls_top        = [item['link'] for item in res[:2] if item.get('link')]
-        contenidos_jina = await asyncio.gather(*[fetch_jina(u) for u in urls_top])
+    if not res:
+        return "No se encontraron noticias recientes.", 1.0, 1.0
 
-        contexto        = ""
-        penalty_local   = 1.0
-        penalty_visita  = 1.0
+    urls_top        = [item['link'] for item in res[:3] if item.get('link')]
+    contenidos_jina = await asyncio.gather(*[fetch_jina(u) for u in urls_top])
 
-        for i, item in enumerate(res[:3]):
-            snippet   = item.get('snippet', '')
-            titulo    = item.get('title', '')
-            contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
-            texto_analisis     = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
-            contexto          += f"- {titulo}: {snippet}\n"
+    contexto       = ""
+    penalty_local  = 1.0
+    penalty_visita = 1.0
 
-            if l_q.lower() in texto_analisis:
-                if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
-                    if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
-                        penalty_local = min(penalty_local, 0.88)
-                    elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
-                        penalty_local = min(penalty_local, 0.95)
-                    else:
-                        penalty_local = min(penalty_local, 0.93)
-                    if sum(1 for p in PALABRAS_BAJA_LOCAL if p in texto_analisis) >= 3:
-                        penalty_local = min(penalty_local, 0.85)
+    for i, item in enumerate(res[:3]):
+        snippet            = item.get('snippet', '')
+        titulo             = item.get('title', '')
+        contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
+        # Usar Jina si hay contenido, si no usar snippet+titulo
+        texto_analisis     = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
+        contexto          += f"- {titulo}: {snippet}\n"
 
-            if v_q.lower() in texto_analisis:
-                if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
-                    if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
-                        penalty_visita = min(penalty_visita, 0.88)
-                    elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
-                        penalty_visita = min(penalty_visita, 0.95)
-                    else:
-                        penalty_visita = min(penalty_visita, 0.93)
-                    if sum(1 for p in PALABRAS_BAJA_VISITA if p in texto_analisis) >= 3:
-                        penalty_visita = min(penalty_visita, 0.85)
+        if l_q.lower() in texto_analisis:
+            if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
+                if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
+                    penalty_local = min(penalty_local, 0.88)
+                elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
+                    penalty_local = min(penalty_local, 0.95)
+                else:
+                    penalty_local = min(penalty_local, 0.93)
+                if sum(1 for p in PALABRAS_BAJA_LOCAL if p in texto_analisis) >= 3:
+                    penalty_local = min(penalty_local, 0.85)
 
-        contexto_final = contexto if contexto else "No se encontraron noticias recientes."
-        return contexto_final, penalty_local, penalty_visita
+        if v_q.lower() in texto_analisis:
+            if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
+                if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
+                    penalty_visita = min(penalty_visita, 0.88)
+                elif any(p in texto_analisis for p in ["portero", "defensa", "central", "lateral"]):
+                    penalty_visita = min(penalty_visita, 0.95)
+                else:
+                    penalty_visita = min(penalty_visita, 0.93)
+                if sum(1 for p in PALABRAS_BAJA_VISITA if p in texto_analisis) >= 3:
+                    penalty_visita = min(penalty_visita, 0.85)
 
-    except Exception as e:
-        logging.error(f"Error Serper/Jina: {e}")
-        return "Error consultando noticias de última hora.", 1.0, 1.0
+    contexto_final = contexto if contexto else "No se encontraron noticias recientes."
+    return contexto_final, penalty_local, penalty_visita
 
 
 # --- Persistencia en GitHub ---
@@ -1536,7 +1544,7 @@ PARTIDO: {m_l} vs {m_v}
 
 ── BAJAS (SERPER + JINA) ──
 • {serper_txt}
-• {contexto_noticias[:1800]}
+• {contexto_noticias[:3500]}
 
 ── TARJETAS (POISSON) ──
 • {m_l}: λ={lam_am_l:.1f} amarillas | λ={lam_ro_l:.1f} rojas ({tarj_l.get('partidos_analizados',0)} partidos)
@@ -1576,7 +1584,7 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
 
     if SISTEMA_IA["auditor"]["nodo"]:
         prompt_a = (
-            f"ERES AUDITOR INDEPENDIENTE. Evalúa si el pick es correcto con los datos crudos.\n\n"
+            f"ERES AUDITOR INDEPENDIENTE. Tu misión es verificar si el pick es correcto, NO contradecirlo por obligación.\n\n"
             f"PARTIDO: {m_l} vs {m_v}\n"
             f"Pick: {pick_final} | Nivel: {nivel} | Stake: {stake}%\n"
             f"Edge local: {edge_ajustado*100:.2f}% | Empate: {edge_empate*100:.2f}% | Visita: {edge_visita*100:.2f}%\n"
@@ -1590,10 +1598,11 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
             f"Pick riesgo: {pick_riesgo_nombre if pick_riesgo_nombre else 'N/A'} ({prob_riesgo:.1f}%)\n"
             f"H2H: {h2h} | Forma: {forma_local_txt} / {forma_visita_txt}\n"
             f"Bajas: {serper_txt}\n\n"
+            f"ANÁLISIS DEL ESTRATEGA:\n{analisis_raw or 'Sin análisis'}\n\n"
             f"En máximo 90 palabras: ¿Los datos respaldan o contradicen el pick? "
+            f"Si el estratega tiene razón, confírmalo. Si hay una contradicción real en los datos, señálala con precisión. "
             f"¿El marcador Poisson es coherente con λH/λA? "
-            f"¿Las tarjetas esperadas sugieren mercado alternativo? "
-            f"Señala la contradicción más importante si existe."
+            f"¿Las tarjetas esperadas sugieren mercado alternativo con valor real?"
         )
         auditoria_raw  = await ejecutar_ia("auditor", prompt_a)
         nodos_txt     += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
