@@ -12,9 +12,9 @@
                 "att_a": 0.9100481880656889,
                 "def_a": 0.949804898453977,
                 "tarjetas": {
-                    "avg_amarillas": 2.5,
+                    "avg_amarillas": 1.33,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "partidos_analizados": 3
                 }
             },
             "Rayo Vallecano de Madrid": {
@@ -24,9 +24,9 @@
                 "att_a": 0.8463639375707974,
                 "def_a": 1.1093366888602674,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 3.33,
+                    "avg_rojas": 0.33,
+                    "partidos_analizados": 3
                 }
             },
             "Villarreal CF": {
@@ -38,7 +38,7 @@
                 "tarjetas": {
                     "avg_amarillas": 2.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 2
                 }
             },
             "Real Oviedo": {
@@ -48,9 +48,9 @@
                 "att_a": 1.091473488726391,
                 "def_a": 1.306854016249478,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
+                    "avg_amarillas": 3.5,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 4
                 }
             },
             "RCD Mallorca": {
@@ -60,9 +60,9 @@
                 "att_a": 0.6899522063228816,
                 "def_a": 1.1226389580628882,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
+                    "avg_amarillas": 2.75,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 4
                 }
             },
             "FC Barcelona": {
@@ -72,9 +72,9 @@
                 "att_a": 2.017819850430362,
                 "def_a": 0.7836733097805257,
                 "tarjetas": {
-                    "avg_amarillas": 1.5,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "partidos_analizados": 3
                 }
             },
             "Deportivo Alavés": {
@@ -84,9 +84,9 @@
                 "att_a": 1.061775185112253,
                 "def_a": 1.0432774748324767,
                 "tarjetas": {
-                    "avg_amarillas": 4.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 4
                 }
             },
             "Levante UD": {
@@ -96,9 +96,9 @@
                 "att_a": 0.6787221310473082,
                 "def_a": 1.1919236582583161,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
+                    "avg_amarillas": 3.67,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "partidos_analizados": 3
                 }
             },
             "Valencia CF": {
@@ -108,9 +108,9 @@
                 "att_a": 0.9955735042870237,
                 "def_a": 0.9134227619226735,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
+                    "avg_amarillas": 1.25,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 4
                 }
             },
             "Real Sociedad de Fútbol": {
@@ -120,9 +120,9 @@
                 "att_a": 1.0960967189099589,
                 "def_a": 1.191791835841887,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 2.75,
+                    "avg_rojas": 0.25,
+                    "partidos_analizados": 4
                 }
             },
             "RC Celta de Vigo": {
@@ -132,9 +132,9 @@
                 "att_a": 1.1053443196072559,
                 "def_a": 0.8231401305905116,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
+                    "avg_amarillas": 2.25,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 4
                 }
             },
             "Getafe CF": {
@@ -144,9 +144,9 @@
                 "att_a": 0.746316531729556,
                 "def_a": 0.8260851921216517,
                 "tarjetas": {
-                    "avg_amarillas": 4.0,
-                    "avg_rojas": 1.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 4.67,
+                    "avg_rojas": 0.67,
+                    "partidos_analizados": 3
                 }
             },
             "Athletic Club": {
@@ -156,9 +156,9 @@
                 "att_a": 1.0647548903234993,
                 "def_a": 1.0132672323376462,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
+                    "avg_amarillas": 1.33,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 3
                 }
             },
             "Sevilla FC": {
@@ -168,9 +168,9 @@
                 "att_a": 0.7488076046970896,
                 "def_a": 1.1776393323434688,
                 "tarjetas": {
-                    "avg_amarillas": 1.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 2.5,
+                    "avg_rojas": 0.25,
+                    "partidos_analizados": 4
                 }
             },
             "RCD Espanyol de Barcelona": {
@@ -180,9 +180,9 @@
                 "att_a": 0.8847678508753762,
                 "def_a": 1.1381400059906637,
                 "tarjetas": {
-                    "avg_amarillas": 4.0,
+                    "avg_amarillas": 3.0,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 3
                 }
             },
             "Club Atlético de Madrid": {
@@ -192,9 +192,9 @@
                 "att_a": 0.9958060987725982,
                 "def_a": 0.9086789205013376,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 4.5,
+                    "avg_rojas": 0.25,
+                    "partidos_analizados": 4
                 }
             },
             "Elche CF": {
@@ -204,9 +204,9 @@
                 "att_a": 0.8866945556297621,
                 "def_a": 1.1958150234653218,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 2.25,
+                    "avg_rojas": 0.25,
+                    "partidos_analizados": 4
                 }
             },
             "Real Betis Balompié": {
@@ -216,9 +216,9 @@
                 "att_a": 1.0179125108325362,
                 "def_a": 0.9021118558905473,
                 "tarjetas": {
-                    "avg_amarillas": 3.0,
+                    "avg_amarillas": 2.25,
                     "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "partidos_analizados": 4
                 }
             },
             "Real Madrid CF": {
@@ -228,9 +228,9 @@
                 "att_a": 1.413075590371997,
                 "def_a": 0.71328619853559,
                 "tarjetas": {
-                    "avg_amarillas": 1.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 1.5,
+                    "avg_rojas": 0.25,
+                    "partidos_analizados": 4
                 }
             },
             "CA Osasuna": {
@@ -240,9 +240,9 @@
                 "att_a": 0.7742734710855256,
                 "def_a": 0.8946325018040961,
                 "tarjetas": {
-                    "avg_amarillas": 2.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 2
+                    "avg_amarillas": 3.67,
+                    "avg_rojas": 0.33,
+                    "partidos_analizados": 3
                 }
             },
             "UD Las Palmas": {
@@ -276,9 +276,9 @@
                 "att_a": 0.693888158785872,
                 "def_a": 1.8823100122187362,
                 "tarjetas": {
-                    "avg_amarillas": 1.0,
-                    "avg_rojas": 0.0,
-                    "partidos_analizados": 1
+                    "avg_amarillas": 1.5,
+                    "avg_rojas": 0.25,
+                    "partidos_analizados": 4
                 }
             }
         },
@@ -8386,5 +8386,5 @@
         "pares_h2h": 474,
         "tarjetas_con_data": 20
     },
-    "last_update_tarjetas": "2026-05-03 07:30:32"
+    "last_update_tarjetas": "2026-05-03 07:42:32"
 }
