@@ -1,7 +1,7 @@
 {
   "estratega": {
     "api": "SAMBA",
-    "nodo": "Meta-Llama-3.3-70B [AUD] | 99%"
+    "nodo": "DeepSeek-V3.1 [EST] | 95%"
   },
   "auditor": {
     "api": "GROQ",
