@@ -4,7 +4,7 @@
     "nodo": "llama-3.3-70b-versatile [EST] | 99%"
   },
   "auditor": {
-    "api": null,
-    "nodo": null
+    "api": "SAMBA",
+    "nodo": "Meta-Llama-3.3-70B [AUD] | 99%"
   }
 }
