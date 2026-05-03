@@ -38,7 +38,8 @@
         "nivel": "NO BET 🚫",
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
-        "status": "⏳ PENDIENTE"
+        "status": "➖ VOID",
+        "marcador_real": "2-1"
     },
     {
         "fecha": "2026-05-03 01:50",
@@ -51,6 +52,7 @@
         "nivel": "NO BET 🚫",
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
-        "status": "⏳ PENDIENTE"
+        "status": "➖ VOID",
+        "marcador_real": "2-1"
     }
 ]
