@@ -1,13 +1,10 @@
 name: Entrenador Poisson España
-
 on:
   schedule:
-    - cron: '0 */12 * * *' # Cada 12 horas
+    - cron: '0 5 * * *' # Cada 24h a las 11pm Juárez / 05:00 UTC
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,22 +13,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.BOT_REPO_TOKEN }}
-
       - name: Configurar Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Instalar dependencias
         run: |
           pip install requests pandas numpy scipy understat aiohttp nest_asyncio
-
       - name: Ejecutar el script Trainer
         env:
           FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
         run: python trainer.py
-
       - name: Subir cambios al repositorio
         run: |
           git config --local user.email "action@github.com"
