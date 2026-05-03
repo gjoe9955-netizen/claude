@@ -4,7 +4,7 @@
     "nodo": "Meta-Llama-3.3-70B [AUD] | 99%"
   },
   "auditor": {
-    "api": "SAMBA",
-    "nodo": "Meta-Llama-3.3-70B [AUD] | 99%"
+    "api": "GROQ",
+    "nodo": "meta-llama/llama-4-scout-17b-16e-instruct [AUD] | 98%"
   }
 }
