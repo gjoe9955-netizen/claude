@@ -1,0 +1,10 @@
+{
+  "estratega": {
+    "api": "GROQ",
+    "nodo": "llama-3.3-70b-versatile [EST] | 99%"
+  },
+  "auditor": {
+    "api": null,
+    "nodo": null
+  }
+}
