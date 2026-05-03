@@ -85,6 +85,76 @@ NOMBRES_ODDS_API = {
     "Real Valladolid CF":         "Valladolid",
 }
 
+# ── ALIAS: cualquier variante que el usuario pueda escribir → nombre canónico del JSON ──
+ALIAS_EQUIPOS = {
+    "real madrid":           "Real Madrid CF",
+    "madrid":                "Real Madrid CF",
+    "rm":                    "Real Madrid CF",
+    "barcelona":             "FC Barcelona",
+    "barça":                 "FC Barcelona",
+    "barca":                 "FC Barcelona",
+    "fcb":                   "FC Barcelona",
+    "atletico":              "Club Atlético de Madrid",
+    "atlético":              "Club Atlético de Madrid",
+    "atletico de madrid":    "Club Atlético de Madrid",
+    "atlético de madrid":    "Club Atlético de Madrid",
+    "atm":                   "Club Atlético de Madrid",
+    "sevilla":               "Sevilla FC",
+    "villarreal":            "Villarreal CF",
+    "athletic":              "Athletic Club",
+    "athletic bilbao":       "Athletic Club",
+    "bilbao":                "Athletic Club",
+    "real sociedad":         "Real Sociedad de Fútbol",
+    "sociedad":              "Real Sociedad de Fútbol",
+    "betis":                 "Real Betis Balompié",
+    "real betis":            "Real Betis Balompié",
+    "celta":                 "RC Celta de Vigo",
+    "celta vigo":            "RC Celta de Vigo",
+    "espanyol":              "RCD Espanyol de Barcelona",
+    "rcd espanyol":          "RCD Espanyol de Barcelona",
+    "valencia":              "Valencia CF",
+    "getafe":                "Getafe CF",
+    "osasuna":               "CA Osasuna",
+    "girona":                "Girona FC",
+    "rayo":                  "Rayo Vallecano de Madrid",
+    "rayo vallecano":        "Rayo Vallecano de Madrid",
+    "mallorca":              "RCD Mallorca",
+    "rcd mallorca":          "RCD Mallorca",
+    "alaves":                "Deportivo Alavés",
+    "alavés":                "Deportivo Alavés",
+    "deportivo alaves":      "Deportivo Alavés",
+    "deportivo alavés":      "Deportivo Alavés",
+    "las palmas":            "UD Las Palmas",
+    "ud las palmas":         "UD Las Palmas",
+    "leganes":               "CD Leganés",
+    "leganés":               "CD Leganés",
+    "valladolid":            "Real Valladolid CF",
+    "real valladolid":       "Real Valladolid CF",
+    "levante":               "Levante UD",
+    "oviedo":                "Real Oviedo",
+    "real oviedo":           "Real Oviedo",
+}
+
+
+def resolver_nombre_equipo(entrada: str, teams_json: dict):
+    """Resuelve cualquier variante al nombre canónico del JSON."""
+    entrada_clean = entrada.strip()
+    entrada_lower = entrada_clean.lower()
+    # 1. Match exacto
+    if entrada_clean in teams_json:
+        return entrada_clean
+    # 2. Alias explícito
+    if entrada_lower in ALIAS_EQUIPOS:
+        canonico = ALIAS_EQUIPOS[entrada_lower]
+        if canonico in teams_json:
+            return canonico
+    # 3. Substring match flexible (comportamiento original)
+    return next(
+        (t for t in teams_json if t.lower() in entrada_lower or entrada_lower in t.lower()),
+        None
+    )
+
+
 # ============================================================
 # CAMBIO 1 — Helper centralizado de errores de API
 # ============================================================
@@ -323,10 +393,17 @@ async def obtener_contexto_real(l_q, v_q):
     url     = "https://google.serper.dev/search"
     headers = {'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json'}
 
-    # Query principal: partido + bajas/lesiones (sin restricción de sitio)
-    query_principal = f'"{l_q}" "{v_q}" (baja OR lesión OR lesionado OR alineación OR ausente OR sancionado)'
+    # Usar nombre corto para Serper (Google funciona mejor con nombres cortos)
+    # Primero intentar resolver al canónico del JSON, luego mapear a nombre corto
+    l_canon  = next((v for k, v in ALIAS_EQUIPOS.items() if k == l_q.strip().lower()), l_q)
+    v_canon  = next((v for k, v in ALIAS_EQUIPOS.items() if k == v_q.strip().lower()), v_q)
+    l_serper = NOMBRES_ODDS_API.get(l_canon, l_canon)
+    v_serper = NOMBRES_ODDS_API.get(v_canon, v_canon)
+
+    # Query principal: nombre corto + bajas/lesiones
+    query_principal = f'"{l_serper}" "{v_serper}" (baja OR lesión OR lesionado OR alineación OR ausente OR sancionado)'
     # Query de fallback: solo los equipos + noticias recientes
-    query_fallback  = f'"{l_q}" "{v_q}" noticias LaLiga'
+    query_fallback  = f'"{l_serper}" "{v_serper}" noticias LaLiga'
 
     res = []
     for query in [query_principal, query_fallback]:
@@ -350,15 +427,18 @@ async def obtener_contexto_real(l_q, v_q):
     penalty_local  = 1.0
     penalty_visita = 1.0
 
+    # Buscar en texto con nombre corto Y nombre largo para máxima cobertura
+    l_buscar = [l_q.lower(), l_serper.lower()]
+    v_buscar = [v_q.lower(), v_serper.lower()]
+
     for i, item in enumerate(res[:3]):
         snippet            = item.get('snippet', '')
         titulo             = item.get('title', '')
         contenido_completo = contenidos_jina[i] if i < len(contenidos_jina) else ""
-        # Usar Jina si hay contenido, si no usar snippet+titulo
         texto_analisis     = (contenido_completo if contenido_completo else snippet + " " + titulo).lower()
         contexto          += f"- {titulo}: {snippet}\n"
 
-        if l_q.lower() in texto_analisis:
+        if any(nombre in texto_analisis for nombre in l_buscar):
             if any(p in texto_analisis for p in PALABRAS_BAJA_LOCAL):
                 if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
                     penalty_local = min(penalty_local, 0.88)
@@ -369,7 +449,7 @@ async def obtener_contexto_real(l_q, v_q):
                 if sum(1 for p in PALABRAS_BAJA_LOCAL if p in texto_analisis) >= 3:
                     penalty_local = min(penalty_local, 0.85)
 
-        if v_q.lower() in texto_analisis:
+        if any(nombre in texto_analisis for nombre in v_buscar):
             if any(p in texto_analisis for p in PALABRAS_BAJA_VISITA):
                 if any(p in texto_analisis for p in ["delantero", "goleador", "extremo", "mediapunta"]):
                     penalty_visita = min(penalty_visita, 0.88)
@@ -613,6 +693,17 @@ async def obtener_datos_mercado(equipo_l, equipo_v=""):
         ov_consenso = round(sum(ov_list) / len(ov_list), 3)
         rango_l     = (round(min(ol_list), 3), round(max(ol_list), 3))
         rango_v     = (round(min(ov_list), 3), round(max(ov_list), 3))
+
+        # Si Pinnacle está disponible, usarlo como referencia principal para el edge
+        # (menor margen → probabilidades implícitas más limpias)
+        idx_pinnacle = next(
+            (i for i, bm in enumerate(bookmakers_ordenados[:MAX_CASAS]) if bm['key'] == 'pinnacle'),
+            None
+        )
+        if idx_pinnacle is not None and idx_pinnacle < len(ol_list):
+            # Devolver cuota Pinnacle como referencia, consenso en rango
+            return ol_list[idx_pinnacle], oe_list[idx_pinnacle], ov_list[idx_pinnacle], True, casas_usadas, rango_l, rango_v
+
         return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
 
     except Exception as e:
@@ -1096,8 +1187,8 @@ async def handle_pronostico(message):
         await bot.edit_message_text("❌ Error al cargar el JSON del servidor.", message.chat.id, msg_espera.message_id); return
 
     liga = next(iter(full_data))
-    m_l  = next((t for t in full_data[liga]['teams'] if t.lower() in l_q.lower() or l_q.lower() in t.lower()), None)
-    m_v  = next((t for t in full_data[liga]['teams'] if t.lower() in v_q.lower() or v_q.lower() in t.lower()), None)
+    m_l  = resolver_nombre_equipo(l_q, full_data[liga]['teams'])
+    m_v  = resolver_nombre_equipo(v_q, full_data[liga]['teams'])
 
     if not m_l or not m_v:
         equipo_faltante = l_q if not m_l else v_q
