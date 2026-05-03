@@ -9,7 +9,7 @@ import time
 RAPIDAPI_KEY  = os.getenv("RAPIDAPI_KEY")
 RAPIDAPI_HOST = "sportapi7.p.rapidapi.com"
 RAPID_HEADERS = {
-    "X-RapidAPI-Key":  RAPIDAPI_KEY or "69d26833dbmsh4d90d8b7f27f1bfp1c2c54jsn373a7e1afc6b",
+    "X-RapidAPI-Key":  RAPIDAPI_KEY or "",
     "X-RapidAPI-Host": RAPIDAPI_HOST
 }
 
