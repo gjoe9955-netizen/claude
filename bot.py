@@ -1699,7 +1699,7 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
             f"H2H: {h2h} | Forma: {forma_local_txt} / {forma_visita_txt}\n"
             f"Bajas: {serper_txt}\n\n"
             f"ANÁLISIS DEL ESTRATEGA:\n{analisis_raw or 'Sin análisis'}\n\n"
-            f"En máximo 90 palabras: ¿Los datos respaldan o contradicen el pick? "
+            f"En máximo 60 palabras: ¿Los datos respaldan o contradicen el pick? "
             f"Si el estratega tiene razón, confírmalo. Si hay una contradicción real en los datos, señálala con precisión. "
             f"¿El marcador Poisson es coherente con λH/λA? "
             f"¿Las tarjetas esperadas sugieren mercado alternativo con valor real?"
