@@ -308,29 +308,34 @@ def obtener_tarjetas_por_partido(event_id: int) -> dict:
     try:
         url = f"https://{RAPIDAPI_HOST}/api/v1/event/{event_id}/incidents"
         r   = requests.get(url, headers=RAPID_HEADERS, timeout=10)
-        print(f"   [DEBUG] event {event_id} → HTTP {r.status_code}")
+
+        # Parar inmediatamente si hay error de cuota o autenticación
+        if r.status_code == 429:
+            print(f"   ⚠️  Rate limit (429) — cuota agotada, abortando incidents.")
+            return None  # None = señal para abortar el loop
         if r.status_code != 200:
-            print(f"   [DEBUG] response: {r.text[:300]}")
+            print(f"   [DEBUG] event {event_id} → HTTP {r.status_code}: {r.text[:150]}")
             return {}
 
         incidents = r.json().get("incidents", [])
 
-        # DEBUG: muestra todos los incidentType únicos del partido
-        tipos = set(inc.get("incidentType", "") for inc in incidents)
-        print(f"   [DEBUG] tipos en partido {event_id}: {tipos}")
+        # DEBUG: muestra el primer incident de tipo 'card' completo (solo primer partido)
+        for inc in incidents:
+            if inc.get("incidentType") == "card":
+                print(f"   [DEBUG] card ejemplo: {json.dumps(inc, ensure_ascii=False)[:400]}")
+                break
 
         tarjetas = defaultdict(lambda: {"amarillas": 0, "rojas": 0})
         for inc in incidents:
-            tipo = str(inc.get("incidentType", "")).lower()
-            if "card" not in tipo:
+            if inc.get("incidentType") != "card":
                 continue
             color     = str(inc.get("incidentClass", "")).lower()
             nombre_eq = inc.get("team", {}).get("name", "")
             if not nombre_eq:
                 continue
-            if "yellow" in color or "yellow" in tipo:
+            if "yellow" in color:
                 tarjetas[nombre_eq]["amarillas"] += 1
-            elif "red" in color or "red" in tipo:
+            elif "red" in color:
                 tarjetas[nombre_eq]["rojas"] += 1
         return dict(tarjetas)
 
@@ -344,10 +349,14 @@ def calcular_tarjetas_promedio(equipos_fd: list, mapeo_rapid: dict, eventos: lis
     total_eventos    = len(eventos)
     eventos_ok       = 0
     eventos_sin_data = 0
+    debug_hecho      = False  # solo mostrar card ejemplo una vez
     print(f"   Procesando incidents de {total_eventos} partidos...")
     import time
     for i, ev in enumerate(eventos):
         tarjetas = obtener_tarjetas_por_partido(ev["id"])
+        if tarjetas is None:  # cuota agotada — abortar
+            print(f"   ⚠️  Abortando — cuota RapidAPI agotada.")
+            break
         if tarjetas:
             eventos_ok += 1
             for nombre_eq, datos in tarjetas.items():
