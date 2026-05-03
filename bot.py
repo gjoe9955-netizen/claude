@@ -1536,7 +1536,7 @@ PARTIDO: {m_l} vs {m_v}
 
 ── BAJAS (SERPER + JINA) ──
 • {serper_txt}
-• {contexto_noticias[:1500]}
+• {contexto_noticias[:1800]}
 
 ── TARJETAS (POISSON) ──
 • {m_l}: λ={lam_am_l:.1f} amarillas | λ={lam_ro_l:.1f} rojas ({tarj_l.get('partidos_analizados',0)} partidos)
