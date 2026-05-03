@@ -54,5 +54,18 @@
         "stake_riesgo": "0.25%",
         "status": "➖ VOID",
         "marcador_real": "2-1"
+    },
+    {
+        "fecha": "2026-05-03 10:05",
+        "partido": "Real Betis Balompié vs Real Oviedo",
+        "pick": "No Bet",
+        "poisson": "0.0%",
+        "cuota": 1.553,
+        "edge": "0.0%",
+        "stake": "0%",
+        "nivel": "NO BET 🚫",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
