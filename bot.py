@@ -1538,7 +1538,7 @@ async def handle_pronostico(message):
 
     context_block = (
         f"\n<b>◆ CONTEXTO</b>\n"
-        f"<b>H2H</b> {html.escape(h2h_texto)} → {html.escape(h2h_ajuste_txt)}\n"
+        f"<b>H2H</b> {html.escape(h2h_texto.replace('H2H ', ''))} → {html.escape(h2h_ajuste_txt)}\n"
         f"<b>🏠</b> {html.escape(forma_local_txt)}\n"
         f"<b>🚩</b> {html.escape(forma_visita_txt)}\n"
         f"<b>🏆</b> {html.escape(tabla_texto)}\n"
