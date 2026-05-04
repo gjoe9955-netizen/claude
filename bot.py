@@ -7,6 +7,7 @@ import requests
 import base64
 import re as _re
 import html
+import statistics
 from scipy.stats import poisson
 from datetime import datetime, timedelta, timezone
 
@@ -15,6 +16,8 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 from aiohttp import web
+
+from kelly_ia import evaluar_kelly_ia
 
 # --- Configuración de Entorno ---
 logging.basicConfig(level=logging.INFO)
@@ -40,25 +43,21 @@ FILE_PATH     = "historial.json"
 ELO_FILE_PATH    = "elo_cache.json"
 CONFIG_FILE_PATH = "config_ia.json"
 
-# ID de LaLiga en SportAPI7
 LALIGA_TOURNAMENT_ID = 8
 
 bot      = AsyncTeleBot(TOKEN)
 COOLDOWN = {}
 COOLDOWN_MINUTOS = 30
 
-# ── CONSTANTES DE VENTAJA DE CAMPO ─────────────────────────
 HOME_ADVANTAGE_FACTOR = 1.10
 HOME_ELO_BONUS        = 50
 DC_RHO                = -0.13
 
-# ── RAPID HEADERS ───────────────────────────────────────────
 RAPID_HEADERS = {
     "X-RapidAPI-Key":  RAPIDAPI_KEY or "",
     "X-RapidAPI-Host": RAPIDAPI_HOST
 }
 
-# ── MAPEO DE NOMBRES: Football-Data → The Odds API ───────────
 NOMBRES_ODDS_API = {
     "Girona FC":                  "Girona",
     "Rayo Vallecano de Madrid":   "Rayo Vallecano",
@@ -85,7 +84,6 @@ NOMBRES_ODDS_API = {
     "Real Valladolid CF":         "Valladolid",
 }
 
-# ── ALIAS: cualquier variante que el usuario pueda escribir → nombre canónico del JSON ──
 ALIAS_EQUIPOS = {
     "real madrid":           "Real Madrid CF",
     "madrid":                "Real Madrid CF",
@@ -137,29 +135,21 @@ ALIAS_EQUIPOS = {
 
 
 def resolver_nombre_equipo(entrada: str, teams_json: dict):
-    """Resuelve cualquier variante al nombre canónico del JSON."""
     entrada_clean = entrada.strip()
     entrada_lower = entrada_clean.lower()
-    # 1. Match exacto
     if entrada_clean in teams_json:
         return entrada_clean
-    # 2. Alias explícito
     if entrada_lower in ALIAS_EQUIPOS:
         canonico = ALIAS_EQUIPOS[entrada_lower]
         if canonico in teams_json:
             return canonico
-    # 3. Substring match flexible (comportamiento original)
     return next(
         (t for t in teams_json if t.lower() in entrada_lower or entrada_lower in t.lower()),
         None
     )
 
 
-# ============================================================
-# CAMBIO 1 — Helper centralizado de errores de API
-# ============================================================
 def _error_api(nombre_api: str, detalle: str = "", status_code: int = None) -> str:
-    """Genera un mensaje de error legible para el usuario."""
     partes = [f"❌ <b>Falló {nombre_api}</b>"]
     if status_code:
         partes.append(f"Código HTTP: <code>{status_code}</code>")
@@ -168,7 +158,6 @@ def _error_api(nombre_api: str, detalle: str = "", status_code: int = None) -> s
     return "\n".join(partes)
 
 
-# --- Cache del modelo en memoria ---
 _MODELO_CACHE = {"data": None, "ts": None}
 CACHE_TTL_SEGUNDOS = 3600
 
@@ -187,10 +176,6 @@ async def obtener_modelo():
     return _MODELO_CACHE["data"], False
 
 
-# ============================================================
-# SPORTAPI7 — helpers para bot (lineups, goleadores, tarjetas)
-# ============================================================
-
 def _similitud(a: str, b: str) -> float:
     palabras_a = set(a.lower().split())
     palabras_b = set(b.lower().split())
@@ -206,74 +191,58 @@ def _similitud(a: str, b: str) -> float:
 async def buscar_evento_rapid(nombre_local: str, nombre_visita: str, fecha: str = None) -> int | None:
     if not RAPIDAPI_KEY:
         return None
-
     if not fecha:
         fecha = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
     try:
         url = f"https://{RAPIDAPI_HOST}/api/v1/sport/football/scheduled-events/{fecha}"
         r   = await asyncio.to_thread(requests.get, url, headers=RAPID_HEADERS, timeout=15)
         if r.status_code != 200:
             return None
-
         eventos = r.json().get("events", [])
         mejor_score = 0.0
         mejor_id    = None
-
         for ev in eventos:
             unique = ev.get("tournament", {}).get("uniqueTournament", {})
             if unique.get("id") != LALIGA_TOURNAMENT_ID:
                 continue
-
             h_name = ev.get("homeTeam", {}).get("name", "")
             a_name = ev.get("awayTeam", {}).get("name", "")
-
             score_h = _similitud(nombre_local,  h_name)
             score_a = _similitud(nombre_visita, a_name)
             score   = (score_h + score_a) / 2
-
             if score > mejor_score:
                 mejor_score = score
                 mejor_id    = ev.get("id")
-
         if mejor_score >= 0.35 and mejor_id:
             logging.info(f"[SportAPI7] Evento encontrado: id={mejor_id} score={mejor_score:.2f}")
             return mejor_id
-
     except Exception as e:
         logging.error(f"[SportAPI7] Error buscando evento: {e}")
-
     return None
 
 
 async def obtener_lineups_rapid(event_id: int) -> dict:
     if not RAPIDAPI_KEY or not event_id:
         return {}
-
     try:
         url = f"https://{RAPIDAPI_HOST}/api/v1/event/{event_id}/lineups"
         r   = await asyncio.to_thread(requests.get, url, headers=RAPID_HEADERS, timeout=15)
         if r.status_code != 200:
             return {}
-
         data = r.json()
         resultado = {"local": [], "visita": []}
-
         home_data = data.get("home", {})
         for jugador in home_data.get("players", []):
             nombre = jugador.get("player", {}).get("name", "")
             if nombre:
                 resultado["local"].append(nombre)
-
         away_data = data.get("away", {})
         for jugador in away_data.get("players", []):
             nombre = jugador.get("player", {}).get("name", "")
             if nombre:
                 resultado["visita"].append(nombre)
-
         logging.info(f"[SportAPI7] Lineups: local={len(resultado['local'])} visita={len(resultado['visita'])}")
         return resultado
-
     except Exception as e:
         logging.error(f"[SportAPI7] Error lineups: {e}")
         return {}
@@ -282,14 +251,12 @@ async def obtener_lineups_rapid(event_id: int) -> dict:
 async def obtener_goleadores_fd() -> list:
     if not FOOTBALL_DATA_KEY:
         return []
-
     try:
         url     = "https://api.football-data.org/v4/competitions/PD/scorers?limit=10"
         headers = {"X-Auth-Token": FOOTBALL_DATA_KEY}
         r       = await asyncio.to_thread(requests.get, url, headers=headers, timeout=15)
         if r.status_code != 200:
             return []
-
         scorers = r.json().get("scorers", [])
         resultado = []
         for s in scorers:
@@ -298,10 +265,8 @@ async def obtener_goleadores_fd() -> list:
             goles  = s.get("goals", 0) or 0
             if nombre:
                 resultado.append({"nombre": nombre, "equipo": equipo, "goles": goles})
-
         logging.info(f"[FD Scorers] {len(resultado)} goleadores obtenidos.")
         return resultado
-
     except Exception as e:
         logging.error(f"[FD Scorers] Error: {e}")
         return []
@@ -309,21 +274,16 @@ async def obtener_goleadores_fd() -> list:
 
 def cruzar_goleadores_lineup(goleadores: list, lineups: dict, nombre_local: str, nombre_visita: str) -> dict:
     resultado = {"local": [], "visita": []}
-
     if not goleadores:
         return resultado
-
     for scorer in goleadores:
         nombre_scorer = scorer["nombre"].lower()
         equipo_scorer = scorer["equipo"].lower()
         goles         = scorer["goles"]
-
         es_local  = (nombre_local.lower()  in equipo_scorer or equipo_scorer in nombre_local.lower())
         es_visita = (nombre_visita.lower() in equipo_scorer or equipo_scorer in nombre_visita.lower())
-
         if not es_local and not es_visita:
             continue
-
         if lineups:
             jugadores_equipo = lineups["local"] if es_local else lineups["visita"]
             en_lineup = any(
@@ -332,40 +292,30 @@ def cruzar_goleadores_lineup(goleadores: list, lineups: dict, nombre_local: str,
             )
             if jugadores_equipo and not en_lineup:
                 continue
-
         if es_local:
             resultado["local"].append((scorer["nombre"], goles))
         elif es_visita:
             resultado["visita"].append((scorer["nombre"], goles))
-
     return resultado
 
 
 def obtener_tarjetas_del_modelo(full_data: dict, nombre_local: str, nombre_visita: str) -> dict:
     liga   = next(iter(full_data))
     teams  = full_data[liga].get("teams", {})
-
     match_l = next((t for t in teams if t.lower() in nombre_local.lower() or nombre_local.lower() in t.lower()), None)
     match_v = next((t for t in teams if t.lower() in nombre_visita.lower() or nombre_visita.lower() in t.lower()), None)
-
     tarjetas_l = teams.get(match_l, {}).get("tarjetas") if match_l else None
     tarjetas_v = teams.get(match_v, {}).get("tarjetas") if match_v else None
-
     return {
         "local":  tarjetas_l or {"avg_amarillas": 2.1, "avg_rojas": 0.1, "partidos_analizados": 0},
         "visita": tarjetas_v or {"avg_amarillas": 2.1, "avg_rojas": 0.1, "partidos_analizados": 0}
     }
 
 
-# ============================================================
-# BÚSQUEDA DE BAJAS (Serper + Jina)
-# ============================================================
-PALABRAS_BAJA_LOCAL   = [
-    # Español
+PALABRAS_BAJA_LOCAL = [
     "baja", "lesión", "lesionado", "no jugará", "ausente", "descartado",
     "baja confirmada", "no estará", "se pierde", "fuera de la convocatoria",
     "no disponible", "sancionado", "suspendido", "duda", "baja por lesión",
-    # Inglés
     "out", "injured", "injury", "suspended", "suspension", "doubtful",
     "ruled out", "miss", "misses", "unavailable", "banned", "absence",
     "will not play", "won\'t play", "fitness concern", "muscular",
@@ -398,16 +348,12 @@ async def obtener_contexto_real(l_q, v_q):
     url     = "https://google.serper.dev/search"
     headers = {'X-API-KEY': SERPER_KEY, 'Content-Type': 'application/json'}
 
-    # Usar nombre corto para Serper (Google funciona mejor con nombres cortos)
-    # Primero intentar resolver al canónico del JSON, luego mapear a nombre corto
     l_canon  = next((v for k, v in ALIAS_EQUIPOS.items() if k == l_q.strip().lower()), l_q)
     v_canon  = next((v for k, v in ALIAS_EQUIPOS.items() if k == v_q.strip().lower()), v_q)
     l_serper = NOMBRES_ODDS_API.get(l_canon, l_canon)
     v_serper = NOMBRES_ODDS_API.get(v_canon, v_canon)
 
-    # Query principal: nombre corto + bajas/lesiones
     query_principal = f'"{l_serper}" "{v_serper}" (baja OR lesión OR lesionado OR alineación OR ausente OR sancionado)'
-    # Query de fallback: solo los equipos + noticias recientes
     query_fallback  = f'"{l_serper}" "{v_serper}" noticias LaLiga'
 
     res = []
@@ -418,7 +364,7 @@ async def obtener_contexto_real(l_q, v_q):
             res = r.json().get('organic', [])
             logging.info(f"[Serper] Query='{query}' → {len(res)} resultados")
             if res:
-                break  # con resultados, no necesitamos fallback
+                break
         except Exception as e:
             logging.error(f"[Serper] Error query='{query}': {e}")
 
@@ -432,7 +378,6 @@ async def obtener_contexto_real(l_q, v_q):
     penalty_local  = 1.0
     penalty_visita = 1.0
 
-    # Buscar en texto con nombre corto Y nombre largo para máxima cobertura
     l_buscar = [l_q.lower(), l_serper.lower()]
     v_buscar = [v_q.lower(), v_serper.lower()]
 
@@ -469,7 +414,6 @@ async def obtener_contexto_real(l_q, v_q):
     return contexto_final, penalty_local, penalty_visita
 
 
-# --- Persistencia en GitHub ---
 async def guardar_en_github(nuevo_registro=None, historial_completo=None):
     url     = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
@@ -508,13 +452,11 @@ async def guardar_en_github(nuevo_registro=None, historial_completo=None):
             logging.error(f"GitHub PUT falló: {r_put.status_code}")
         else:
             logging.info(f"✅ historial.json actualizado ({len(historial)} registros)")
-
     except Exception as e:
         logging.error(f"Error GitHub: {e}", exc_info=True)
 
 
 async def _github_get(file_path: str) -> tuple:
-    """Lee un archivo de GitHub. Retorna (contenido_dict, sha) o (None, None)."""
     url     = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     try:
@@ -531,7 +473,6 @@ async def _github_get(file_path: str) -> tuple:
 
 
 async def _github_put(file_path: str, contenido: dict, sha: str = None, mensaje: str = "🤖 Update"):
-    """Escribe un archivo en GitHub."""
     url     = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     payload = {
@@ -552,14 +493,12 @@ async def _github_put(file_path: str, contenido: dict, sha: str = None, mensaje:
 
 
 async def guardar_elo_github(elos: dict):
-    """Persiste el cache de Elo en GitHub."""
     contenido, sha = await _github_get(ELO_FILE_PATH)
     payload = {"ts": datetime.now(timezone.utc).isoformat(), "elos": {str(k): v for k, v in elos.items()}}
     await _github_put(ELO_FILE_PATH, payload, sha, "🤖 Elo cache update")
 
 
 async def cargar_elo_github() -> dict:
-    """Carga el cache de Elo desde GitHub. Retorna dict vacío si no existe."""
     contenido, _ = await _github_get(ELO_FILE_PATH)
     if contenido and "elos" in contenido:
         return {int(k): v for k, v in contenido["elos"].items()}
@@ -567,7 +506,6 @@ async def cargar_elo_github() -> dict:
 
 
 async def guardar_config_github():
-    """Persiste la config de nodos IA en GitHub."""
     _, sha = await _github_get(CONFIG_FILE_PATH)
     payload = {
         "estratega": SISTEMA_IA["estratega"],
@@ -577,7 +515,6 @@ async def guardar_config_github():
 
 
 async def cargar_config_github():
-    """Carga la config de nodos IA desde GitHub al arranque."""
     contenido, _ = await _github_get(CONFIG_FILE_PATH)
     if contenido:
         if contenido.get("estratega", {}).get("nodo"):
@@ -588,11 +525,9 @@ async def cargar_config_github():
             logging.info(f"[Config] Auditor cargado: {SISTEMA_IA['auditor']['nodo']}")
 
 
-# --- Estado Global IA ---
 SISTEMA_IA = {
     "estratega": {"api": None, "nodo": None},
     "auditor":   {"api": None, "nodo": None},
-
     "nodos_samba": [
         "DeepSeek-V3.2 [EST] | 99%",
         "DeepSeek-V3.1 [EST] | 95%",
@@ -634,10 +569,9 @@ async def ejecutar_ia(rol, prompt):
         return f"❌ Error en Nodo {config['api']}"
 
 
-# --- Odds ---
 async def obtener_datos_mercado(equipo_l, equipo_v=""):
     if not ODDS_API_KEY:
-        return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+        return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00), [], []
 
     CASAS_PREFERIDAS = {
         "pinnacle", "betfair", "bet365", "williamhill",
@@ -645,7 +579,6 @@ async def obtener_datos_mercado(equipo_l, equipo_v=""):
     }
     MAX_CASAS = 6
 
-    # Normalizar nombres usando mapeo Football-Data → Odds API
     query_l = NOMBRES_ODDS_API.get(equipo_l, equipo_l)
     query_v = NOMBRES_ODDS_API.get(equipo_v, equipo_v)
 
@@ -655,7 +588,7 @@ async def obtener_datos_mercado(equipo_l, equipo_v=""):
         r      = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
         if r.status_code != 200:
             logging.warning(f"[OddsAPI] HTTP {r.status_code} — {r.text[:120]}")
-            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00), [], []
 
         mejor_score  = 0.0
         mejor_match  = None
@@ -670,11 +603,11 @@ async def obtener_datos_mercado(equipo_l, equipo_v=""):
 
         if not mejor_match or mejor_score < 0.35:
             logging.warning(f"[OddsAPI] Partido no encontrado: '{query_l}' vs '{query_v}' (score={mejor_score:.2f})")
-            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00), [], []
 
         logging.info(f"[OddsAPI] Partido encontrado: {mejor_match['home_team']} vs {mejor_match['away_team']} (score={mejor_score:.2f})")
 
-        bookmakers         = mejor_match.get('bookmakers', [])
+        bookmakers           = mejor_match.get('bookmakers', [])
         bookmakers_ordenados = sorted(bookmakers, key=lambda b: (0 if b['key'] in CASAS_PREFERIDAS else 1))
         ol_list, oe_list, ov_list = [], [], []
         casas_usadas = []
@@ -691,7 +624,7 @@ async def obtener_datos_mercado(equipo_l, equipo_v=""):
                 continue
 
         if not ol_list:
-            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+            return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00), [], []
 
         ol_consenso = round(sum(ol_list) / len(ol_list), 3)
         oe_consenso = round(sum(oe_list) / len(oe_list), 3)
@@ -699,22 +632,19 @@ async def obtener_datos_mercado(equipo_l, equipo_v=""):
         rango_l     = (round(min(ol_list), 3), round(max(ol_list), 3))
         rango_v     = (round(min(ov_list), 3), round(max(ov_list), 3))
 
-        # Si Pinnacle está disponible, usarlo como referencia principal para el edge
-        # (menor margen → probabilidades implícitas más limpias)
         idx_pinnacle = next(
             (i for i, bm in enumerate(bookmakers_ordenados[:MAX_CASAS]) if bm['key'] == 'pinnacle'),
             None
         )
         if idx_pinnacle is not None and idx_pinnacle < len(ol_list):
-            # Devolver cuota Pinnacle como referencia, consenso en rango
-            return ol_list[idx_pinnacle], oe_list[idx_pinnacle], ov_list[idx_pinnacle], True, casas_usadas, rango_l, rango_v
+            return ol_list[idx_pinnacle], oe_list[idx_pinnacle], ov_list[idx_pinnacle], True, casas_usadas, rango_l, rango_v, ol_list, ov_list
 
-        return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v
+        return ol_consenso, oe_consenso, ov_consenso, True, casas_usadas, rango_l, rango_v, ol_list, ov_list
 
     except Exception as e:
         logging.error(f"Error obtener_datos_mercado: {e}")
 
-    return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00)
+    return 1.85, 3.50, 4.00, False, [], (1.85, 1.85), (4.00, 4.00), [], []
 
 
 async def obtener_confirmacion_ou(equipo_l, lambda_h, lambda_a, equipo_v=""):
@@ -788,9 +718,6 @@ async def obtener_factor_calibracion():
         return 1.0
 
 
-# ============================================================
-# CAMBIO 2 — api_football_call mejorado con errores descriptivos
-# ============================================================
 async def api_football_call(endpoint, _raise_on_error=False):
     if not FOOTBALL_DATA_KEY:
         raise ValueError("FOOTBALL_DATA_API_KEY no configurada")
@@ -818,9 +745,6 @@ async def api_football_call(endpoint, _raise_on_error=False):
         raise RuntimeError(str(e))
 
 
-# ============================================================
-# Cache de partidos FINISHED
-# ============================================================
 _PARTIDOS_FD_CACHE = {"data": None, "ts": None}
 PARTIDOS_FD_TTL    = 3600
 
@@ -833,7 +757,6 @@ async def obtener_partidos_finished() -> list:
         (ahora - _PARTIDOS_FD_CACHE["ts"]).total_seconds() < PARTIDOS_FD_TTL
     ):
         return _PARTIDOS_FD_CACHE["data"]
-
     try:
         data = await api_football_call("matches?status=FINISHED")
         if data and "matches" in data:
@@ -843,13 +766,9 @@ async def obtener_partidos_finished() -> list:
             return data["matches"]
     except Exception as e:
         logging.error(f"[FD] Error partidos FINISHED: {e}")
-
     return _PARTIDOS_FD_CACHE["data"] or []
 
 
-# ============================================================
-# H2H
-# ============================================================
 def obtener_h2h_json(id_local: int, id_visita: int, full_data: dict) -> tuple:
     liga        = next(iter(full_data))
     h2h_section = full_data[liga].get("h2h", {})
@@ -901,9 +820,6 @@ def calcular_factor_h2h(home_wins, away_wins, total_partidos):
         return 1.0, 1.0, f"H2H ⚖️ Equilibrado ({home_wins}L/{away_wins}V)"
 
 
-# ============================================================
-# Forma reciente con timeout 20s y reintentos
-# ============================================================
 async def obtener_forma_reciente(team_id, reintentos: int = 3, delay: float = 2.0):
     if not team_id:
         return 1.0, 1.0, "Forma: Sin ID"
@@ -1008,9 +924,6 @@ def dixon_coles_tau(x, y, lh, la, rho=DC_RHO):
     return 1.0
 
 
-# ============================================================
-# Cache Elo
-# ============================================================
 _ELO_CACHE    = {"data": None, "ts": None}
 ELO_CACHE_TTL = 3600
 
@@ -1023,11 +936,9 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
     if not tabla:
         return {}
 
-    # Intentar cargar desde GitHub primero
     elos_github = await cargar_elo_github()
     elos: dict  = elos_github if elos_github else {tid: 1500.0 for tid in tabla}
 
-    # Asegurar que todos los equipos de la tabla tienen entrada
     for tid in tabla:
         if tid not in elos:
             elos[tid] = 1500.0
@@ -1062,10 +973,7 @@ async def calcular_elo_equipos(tabla: dict) -> dict:
 
     _ELO_CACHE["data"] = elos
     _ELO_CACHE["ts"]   = ahora
-
-    # Guardar en GitHub en background
     asyncio.create_task(guardar_elo_github(elos))
-
     return elos
 
 
@@ -1211,7 +1119,7 @@ async def handle_pronostico(message):
     id_v = v_s.get("id_api")
 
     (
-        (c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v),
+        odds_result,
         (contexto_noticias, penalty_local, penalty_visita),
         factor_calibracion,
         (forma_local_atk, forma_local_def, forma_local_txt),
@@ -1227,6 +1135,8 @@ async def handle_pronostico(message):
         obtener_posiciones_tabla(),
         obtener_goleadores_fd()
     )
+
+    c_l, c_e, c_v, check_odds, casas_usadas, rango_l, rango_v, ol_list, ov_list = odds_result
 
     event_id = await buscar_evento_rapid(m_l, m_v)
     lineups  = await obtener_lineups_rapid(event_id) if event_id else {}
@@ -1313,7 +1223,6 @@ async def handle_pronostico(message):
     if edge_empate   > 0: candidatos.append(("empate", edge_empate,   c_e, "Empate", prob_poisson_empate_cal * 100))
     if edge_visita   > 0: candidatos.append(("visita", edge_visita,   c_v, m_v,      prob_poisson_visita_cal * 100))
 
-    # FIX: Calcular marcadores probables SIEMPRE (no solo en NO BET)
     top_scores = calcular_marcadores_probables(lh, la, top_n=3)
 
     pick_riesgo_nombre = None
@@ -1322,6 +1231,15 @@ async def handle_pronostico(message):
     edge_riesgo        = 0
     prob_riesgo        = 0
     pick_riesgo_cuota  = 0
+
+    # Calcular std de cuotas (Gauss lite)
+    std_l = round(statistics.stdev(ol_list), 3) if len(ol_list) > 1 else 0.0
+    std_v = round(statistics.stdev(ov_list), 3) if len(ov_list) > 1 else 0.0
+
+    serper_txt = ""
+    if penalty_local  < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
+    if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
+    if not serper_txt: serper_txt = " Sin bajas detectadas"
 
     if candidatos and not zona_gris:
         candidatos.sort(key=lambda c: c[1], reverse=True)
@@ -1332,10 +1250,22 @@ async def handle_pronostico(message):
         kelly_fraccionado = kelly_full * kelly_fraccion
         stake_base        = round(kelly_fraccionado * 100, 2)
         stake             = round(stake_base * ou_factor, 2)
-        # Tope dinámico: sube a 5% si el edge es muy fuerte (>20%) y la cuota es alta (>2.5)
-        # para no castrar picks con valor real excepcional
-        tope_kelly = 5.0 if (edge_principal > 0.20 and cuota_pick > 2.5) else 4.0
+        tope_kelly        = 5.0 if (edge_principal > 0.20 and cuota_pick > 2.5) else 4.0
         stake             = max(0.25, min(stake, tope_kelly))
+
+        # Kelly IA — ajuste de stake con contexto LaLiga
+        kelly_result = await evaluar_kelly_ia({
+            "local": m_l, "visita": m_v,
+            "edge_l": edge_ajustado * 100, "edge_e": edge_empate * 100, "edge_v": edge_visita * 100,
+            "stake": stake, "pick": nombre_pick, "nivel": "",
+            "shin_z": shin_z, "shin_confianza": shin_confianza,
+            "std_l": std_l, "std_v": std_v,
+            "forma_l": forma_local_txt, "forma_v": forma_visita_txt,
+            "bajas": serper_txt, "lh": lh, "la": la
+        })
+        stake       = kelly_result["stake_ajustado"]
+        razon_kelly = kelly_result["razon"]
+
         pick_final        = nombre_pick
         p_percent         = prob_pick_pct
 
@@ -1353,7 +1283,6 @@ async def handle_pronostico(message):
             elif stake_riesgo < 0.75: nivel_riesgo = "RIESGO MEDIO 🎲"
             else:                     nivel_riesgo = "RIESGO ALTO 🔴"
         else:
-            # FIX: Si no hay candidato de riesgo alternativo, usar marcador más probable
             if top_scores:
                 marcador_top       = top_scores[0][0]
                 prob_riesgo        = top_scores[0][1] * 100
@@ -1362,6 +1291,7 @@ async def handle_pronostico(message):
                 nivel_riesgo       = "RIESGO ALTO 🔴"
     else:
         nivel, stake, pick_final = "NO BET 🚫", 0, "No Bet"
+        razon_kelly   = "Sin valor detectado"
         ou_factor     = 1.0
         tipo_pick     = "ninguno"
         cuota_pick    = 0
@@ -1424,7 +1354,6 @@ async def handle_pronostico(message):
         fuente_txt  = f"{partidos_ok}p analizados" if partidos_ok > 0 else "fallback liga"
         return f"🟨 {t['avg_amarillas']:.1f} amarillas · 🟥 {t['avg_rojas']:.1f} rojas/partido ({fuente_txt})"
 
-    # ── Cálculo Poisson de tarjetas ────────────────────────────
     lam_am_l = tarj_l['avg_amarillas']
     lam_am_v = tarj_v['avg_amarillas']
     lam_ro_l = tarj_l['avg_rojas']
@@ -1483,7 +1412,6 @@ async def handle_pronostico(message):
         f"<b>🚩</b> {html.escape(_fmt_goleadores(goleadores_partido['visita']))}\n"
     )
 
-    # FIX: Marcadores probables SIEMPRE en el header (no solo en NO BET)
     marcadores_block = ""
     if top_scores:
         marcadores_lines = "  ".join(
@@ -1494,8 +1422,6 @@ async def handle_pronostico(message):
             f"<code>{html.escape(marcadores_lines)}</code>\n"
         )
 
-    calib_txt     = f"{factor_calibracion:.2f}" if factor_calibracion != 1.0 else "1.00 (sin datos suficientes)"
-    # FIX: Indicar dirección del factor calibración
     if factor_calibracion < 1.0:
         calib_dir = f"x{factor_calibracion:.2f} ↘ (modelo sobreestima)"
     elif factor_calibracion > 1.0:
@@ -1504,10 +1430,6 @@ async def handle_pronostico(message):
         calib_dir = "x1.00 (sin datos suficientes)"
 
     h2h_ajuste_txt = f"+{(factor_lh_h2h-1)*100:.1f}%lh" if factor_lh_h2h != 1.0 else (f"+{(factor_la_h2h-1)*100:.1f}%la" if factor_la_h2h != 1.0 else "sin ajuste")
-    serper_txt    = ""
-    if penalty_local  < 1.0: serper_txt += f" ⚠️ Bajas local (-{(1-penalty_local)*100:.0f}%lh)"
-    if penalty_visita < 1.0: serper_txt += f" ⚠️ Bajas visita (-{(1-penalty_visita)*100:.0f}%la)"
-    if not serper_txt: serper_txt = " Sin bajas detectadas"
 
     zona_gris_txt = " · 🌫 Zona gris (mercado eficiente)" if zona_gris else ""
     tipo_emoji    = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
@@ -1537,6 +1459,7 @@ async def handle_pronostico(message):
             f"<b>║  {tipo_emoji} {pick_final:<20}║</b>\n"
             f"<b>║  💰 Stake: {stake}% del bankroll{' '*(9-len(str(stake)))}║</b>\n"
             f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_principal*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
+            f"<b>║  🎯 Kelly IA: {razon_kelly[:20]:<20}║</b>\n"
             f"<b>╚{'═'*22}╝</b>\n"
         )
 
@@ -1549,17 +1472,15 @@ async def handle_pronostico(message):
         f"\n<b>◆ SEÑALES</b>\n"
         f"<code>"
         f"Poisson  🏠 {p_local_pct:.1f}%  🤝 {p_empate_pct:.1f}%  🚩 {p_visita_pct:.1f}%\n"
-        # FIX: Mostrar lambda base junto al lambda ajustado
         f"λH {lh:.2f} (base {lh_base:.2f})  λA {la:.2f} (base {la_base:.2f})\n"
         f"Edge     🏠 {edge_ajustado*100:.1f}%  🤝 {edge_empate*100:.1f}%  🚩 {edge_visita*100:.1f}%\n"
         f"Mercado  Simple 🏠{prob_simple_l*100:.1f}% 🤝{prob_simple_e*100:.1f}% 🚩{prob_simple_v*100:.1f}%\n"
-        # FIX: Shin como probabilidades % + z
         f"Shin     🏠{shin_l*100:.1f}% 🤝{shin_e*100:.1f}% 🚩{shin_v*100:.1f}%  z={shin_z:.4f}\n"
         f"Conf     {html.escape(shin_confianza)}\n"
         f"Cuotas   L {c_l}  E {c_e}  V {c_v}  OR {overround:.3f}  {'(consenso)' if check_odds else '(default)'}\n"
         f"Rango L  [{rango_l[0]}-{rango_l[1]}]  Rango V [{rango_v[0]}-{rango_v[1]}]\n"
+        f"Std      L {std_l}  V {std_v}\n"
         f"Casas    {html.escape(', '.join(casas_usadas) if casas_usadas else 'default')}\n"
-        # FIX: ou_texto sin truncar + calib con dirección
         f"Calib    {html.escape(calib_dir)}\n"
         f"O/U      {html.escape(ou_texto)}\n"
         f"Empate   {html.escape(empate_aviso)}\n"
@@ -1583,7 +1504,6 @@ async def handle_pronostico(message):
     gol_local_txt  = _fmt_goleadores(goleadores_partido["local"])
     gol_visita_txt = _fmt_goleadores(goleadores_partido["visita"])
 
-    # FIX: Marcadores probables SIEMPRE en el prompt_e
     marcadores_prompt = ""
     if top_scores:
         marcadores_prompt = "\n── MARCADORES PROBABLES (Poisson) ──\n"
@@ -1591,7 +1511,7 @@ async def handle_pronostico(message):
             marcadores_prompt += f"• #{i}: {marcador[0]}-{marcador[1]} ({prob*100:.1f}%)\n"
 
     prompt_e = f"""
-Eres analista profesional de fútbol. Tu misión es evaluar si existe valor real en alguno de los tres resultados posibles del partido.
+Eres analista profesional de fútbol especializado en LaLiga española. Tu misión es evaluar si existe valor real en el pick seleccionado.
 
 ═══════════════════════════════════════
 PARTIDO: {m_l} vs {m_v}
@@ -1609,7 +1529,7 @@ PARTIDO: {m_l} vs {m_v}
 • Cuota empate: {c_e} → prob. implícita bruta: {(1/c_e)*100:.1f}%
 • Cuota visitante: {c_v} → prob. implícita bruta: {(1/c_v)*100:.1f}%
 • Overround: {overround:.4f}
-• Rango L [{rango_l[0]}-{rango_l[1]}] · Rango V [{rango_v[0]}-{rango_v[1]}]
+• Rango L [{rango_l[0]}-{rango_l[1]}] · Std L={std_l} | Rango V [{rango_v[0]}-{rango_v[1]}] · Std V={std_v}
 • Casas: {', '.join(casas_usadas) if casas_usadas else 'default'}
 
 ── MÉTODO SHIN ──
@@ -1622,6 +1542,7 @@ PARTIDO: {m_l} vs {m_v}
 
 ── PICK SELECCIONADO ──
 • PICK PRINCIPAL: {pick_final} | Nivel: {nivel} | Stake: {stake}%
+• Kelly IA ajustó stake a {stake}% — Razón: {razon_kelly}
 • {ou_texto} | {empate_aviso}
 
 ── PICK DE RIESGO ──
@@ -1661,6 +1582,7 @@ PARTIDO: {m_l} vs {m_v}
 
 ═══════════════════════════════════════
 PICK PRINCIPAL: {pick_final} | NIVEL: {nivel} | STAKE: {stake}%
+KELLY IA: {razon_kelly}
 PICK RIESGO (marcador): {pick_riesgo_nombre if pick_riesgo_nombre else "N/A"} ({prob_riesgo:.1f}%)
 ═══════════════════════════════════════
 
@@ -1672,26 +1594,29 @@ c) Forma reciente y tabla: refuerzan o contradicen el pronóstico.
 d) H2H histórico: tamaño de muestra y dirección.
 e) Bajas detectadas y su impacto en lambdas.
 f) Over/Under goles: confirma o contradice la dirección.
-g) Tarjetas: qué equipo es más propenso a la primera amarilla/roja, si Over 3.5 o 4.5 amarillas tiene valor, y si el partido apunta a ser tenso o fluido según los lambdas.
+g) Tarjetas: qué equipo es más propenso a la primera amarilla/roja.
 h) Goleador más probable si hay dato disponible.
 i) Marcador más probable (Poisson) y qué implica para el pick.
+j) Evalúa si el ajuste de Kelly IA es coherente con el contexto.
 Sé directo, técnico y conciso. No repitas los números del header, interprétalos.
 """
 
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
-    analisis     = html.escape(_re.sub(r"<[^>]+>", "", analisis_raw or ""))
+    analisis     = html.escape(_re.sub(r"<[^>]+>", "", analisis_raw or ""))[:1800]
     nodos_txt    = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
+    auditoria_raw = ""
     if SISTEMA_IA["auditor"]["nodo"]:
         prompt_a = (
             f"ERES AUDITOR INDEPENDIENTE. Tu misión es verificar si el pick es correcto, NO contradecirlo por obligación.\n\n"
             f"PARTIDO: {m_l} vs {m_v}\n"
             f"Pick: {pick_final} | Nivel: {nivel} | Stake: {stake}%\n"
+            f"Kelly IA razón: {razon_kelly}\n"
             f"Edge local: {edge_ajustado*100:.2f}% | Empate: {edge_empate*100:.2f}% | Visita: {edge_visita*100:.2f}%\n"
             f"Prob modelo: L {p_local_pct:.1f}% E {p_empate_pct:.1f}% V {p_visita_pct:.1f}%\n"
             f"λH={lh:.2f} (base {lh_base:.2f}) | λA={la:.2f} (base {la_base:.2f}) | Shin z={shin_z:.4f} | {shin_confianza}\n"
             f"Shin: L {shin_l*100:.1f}% E {shin_e*100:.1f}% V {shin_v*100:.1f}%\n"
-            f"Rango L [{rango_l[0]}-{rango_l[1]}] | Rango V [{rango_v[0]}-{rango_v[1]}] | Casas: {', '.join(casas_usadas) if casas_usadas else 'default'}\n"
+            f"Rango L [{rango_l[0]}-{rango_l[1]}] Std={std_l} | Rango V [{rango_v[0]}-{rango_v[1]}] Std={std_v}\n"
             f"Calib: {calib_dir}\n"
             f"Tarjetas: {m_l} {tarj_l['avg_amarillas']:.1f}am/{tarj_l['avg_rojas']:.1f}r | {m_v} {tarj_v['avg_amarillas']:.1f}am/{tarj_v['avg_rojas']:.1f}r\n"
             f"Goleadores: L={gol_local_txt} | V={gol_visita_txt}\n"
@@ -1706,18 +1631,22 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
         )
         auditoria_raw  = await ejecutar_ia("auditor", prompt_a)
         nodos_txt     += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
-        auditor_block  = f"\n\n<b>◆ AUDITOR</b>\n{html.escape(_re.sub(r'<[^>]+>', '', auditoria_raw or ''))}"
-    else:
-        auditor_block = ""
+
+    # Fix MESSAGE_TOO_LONG — limitar textos y partir en partes si es necesario
+    auditoria_limpia = html.escape(_re.sub(r'<[^>]+>', '', auditoria_raw or ''))[:600]
+    auditor_block    = f"\n\n<b>◆ AUDITOR</b>\n{auditoria_limpia}" if auditoria_limpia else ""
 
     footer = f"\n\n<i>{'—'*18}\nV12 · {nodos_txt} · ⚙️ Gwero 👷‍♂️</i>"
     final  = f"{header}{analisis}{auditor_block}{footer}"
 
-    await bot.edit_message_text(final, message.chat.id, msg_espera.message_id, parse_mode='HTML')
+    partes = [final[i:i+4066] for i in range(0, len(final), 4066)]
+    await bot.edit_message_text(partes[0], message.chat.id, msg_espera.message_id, parse_mode='HTML')
+    for parte in partes[1:]:
+        await bot.send_message(message.chat.id, parte, parse_mode='HTML')
 
 
 # ============================================================
-# CAMBIO 3 — Comandos con mensajes de error mejorados
+# Comandos de estadísticas y gestión
 # ============================================================
 
 @bot.message_handler(commands=['stats'])
@@ -2034,7 +1963,7 @@ async def cb_fin(call):
 
 
 # ============================================================
-# /live — Análisis in-play con Poisson ajustado
+# /live — Análisis in-play
 # ============================================================
 async def obtener_partido_inplay(l_q: str, v_q: str):
     try:
@@ -2078,7 +2007,6 @@ async def obtener_cuotas_live(l_q: str, v_q: str = ""):
                 mejor_match = match
 
         if not mejor_match or mejor_score < 0.35:
-            logging.warning(f"[Live Odds] Partido no encontrado: '{query_l}' vs '{query_v}' (score={mejor_score:.2f})")
             return None, None, None, "sin_datos", None
 
         bms = mejor_match.get('bookmakers', [])
@@ -2332,7 +2260,7 @@ En máximo 150 palabras: valor real del pick dado marcador y minutos restantes, 
 
 
 # ============================================================
-# CAMBIO 4 — Comando /diagnostico
+# /diagnostico
 # ============================================================
 @bot.message_handler(commands=['diagnostico'])
 async def cmd_diagnostico(message):
@@ -2341,7 +2269,6 @@ async def cmd_diagnostico(message):
     msg = await bot.reply_to(message, "🔬 Probando todas las APIs...")
     resultados = []
 
-    # 1. Football-Data
     try:
         r = await asyncio.to_thread(
             requests.get,
@@ -2361,7 +2288,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>Football-Data</b> — {html.escape(str(e)[:80])}")
 
-    # 2. Odds API
     try:
         r = await asyncio.to_thread(
             requests.get,
@@ -2386,7 +2312,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>Odds API</b> — {html.escape(str(e)[:80])}")
 
-    # 3. Serper
     try:
         r = await asyncio.to_thread(
             requests.post,
@@ -2407,7 +2332,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>Serper</b> — {html.escape(str(e)[:80])}")
 
-    # 4. Groq
     try:
         r = await asyncio.to_thread(
             requests.get,
@@ -2428,7 +2352,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>Groq</b> — {html.escape(str(e)[:80])}")
 
-    # 5. SambaNova
     try:
         r = await asyncio.to_thread(
             requests.get,
@@ -2447,7 +2370,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>SambaNova</b> — {html.escape(str(e)[:80])}")
 
-    # 6. SportAPI7 (RapidAPI)
     try:
         hoy = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         r   = await asyncio.to_thread(
@@ -2468,7 +2390,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>SportAPI7</b> — {html.escape(str(e)[:80])}")
 
-    # 7. GitHub
     try:
         r = await asyncio.to_thread(
             requests.get,
@@ -2489,7 +2410,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>GitHub</b> — {html.escape(str(e)[:80])}")
 
-    # 8. Modelo JSON (GitHub raw)
     try:
         r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
         if r.status_code == 200:
@@ -2501,7 +2421,6 @@ async def cmd_diagnostico(message):
     except Exception as e:
         resultados.append(f"❌ <b>Modelo JSON</b> — {html.escape(str(e)[:80])}")
 
-    # Nodos IA configurados
     e_nodo = SISTEMA_IA["estratega"]["nodo"]
     a_nodo = SISTEMA_IA["auditor"]["nodo"]
     resultados.append(
@@ -2525,7 +2444,7 @@ async def cmd_help(message):
     help_text = (
         "🤖 <b>SISTEMA V12.0 PRO</b>\n\n"
         "📈 <b>ANÁLISIS:</b>\n"
-        "• <code>/pronostico Local vs Visitante</code>: Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin+Kelly+Tarjetas+Goleadores.\n"
+        "• <code>/pronostico Local vs Visitante</code>: Poisson+DC+H2H+Forma+Tabla+Elo+Odds+Shin+Kelly IA+Tarjetas+Goleadores.\n"
         "• <code>/live Local vs Visitante</code>: Análisis in-play con Poisson ajustado a minuto y marcador.\n"
         "• <code>/historial</code>: Últimos pronósticos.\n"
         "• <code>/stats</code>: ROI, % aciertos, racha y desglose por nivel.\n"
@@ -2540,13 +2459,13 @@ async def cmd_help(message):
         "• <code>/tabla</code>: Posiciones liga.\n"
         "• <code>/equipos</code>: Lista equipos JSON.\n\n"
         "🆕 <b>V12 — NOVEDADES:</b>\n"
+        "• Kelly IA ajusta stake con reglas específicas de LaLiga.\n"
+        "• Std desviación de cuotas entre casas (Gauss lite).\n"
+        "• Razón de ajuste Kelly visible en el pick.\n"
+        "• Fix MESSAGE_TOO_LONG — mensajes largos se parten automáticamente.\n"
         "• Tarjetas amarillas/rojas esperadas por partido.\n"
         "• Goleadores probables cruzados con alineación.\n"
         "• Alineaciones confirmadas (SportAPI7).\n"
-        "• Fix timeout/reintentos en forma reciente.\n"
-        "• Mensaje de error mejorado para equipos descendidos.\n"
-        "• Errores de API detallados en todos los comandos.\n"
-        "• /diagnostico para prueba completa de todas las APIs.\n"
     )
     await bot.reply_to(message, help_text, parse_mode='HTML')
 
