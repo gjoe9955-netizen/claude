@@ -2536,7 +2536,7 @@ async def cmd_help(message):
 # ============================================================
 # Webhook & Servidor
 # ============================================================
-WEBHOOK_HOST = "claude-production-e098.up.railway.app"
+WEBHOOK_HOST = "claude-production-7988.up.railway.app"
 WEBHOOK_PATH = f"/{TOKEN}"
 WEBHOOK_URL  = f"https://{WEBHOOK_HOST}{WEBHOOK_PATH}"
 PORT         = int(os.getenv("PORT", 8080))
