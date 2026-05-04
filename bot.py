@@ -1455,9 +1455,19 @@ async def handle_pronostico(message):
                 f"<b>╚{'═'*22}╝</b>\n"
             )
         else:
+            prob_btts = round((1 - poisson.pmf(0, lh)) * (1 - poisson.pmf(0, la)) * 100, 1)
+            prob_over25 = round(sum(
+                poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
+                for x in range(7) for y in range(7) if x + y > 2
+            ) * 100, 1)
             decision_block = (
                 f"<b>╔{'═'*22}╗</b>\n"
                 f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
+                f"<b>╠{'═'*22}╣</b>\n"
+                f"<b>║  💡 MERCADOS ALTERNATIVOS    ║</b>\n"
+                f"<b>║  ⚽ Over 2.5  → {prob_over25}%{' '*(14-len(str(prob_over25)))}║</b>\n"
+                f"<b>║  🎯 BTTS      → {prob_btts}%{' '*(14-len(str(prob_btts)))}║</b>\n"
+                f"<b>║  🟨 Over 3.5am→ {prob_over3_5_am}%{' '*(14-len(str(prob_over3_5_am)))}║</b>\n"
                 f"<b>╚{'═'*22}╝</b>\n"
             )
     else:
