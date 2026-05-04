@@ -1460,9 +1460,32 @@ async def handle_pronostico(message):
                 poisson.pmf(x, lh) * poisson.pmf(y, la) * dixon_coles_tau(x, y, lh, la)
                 for x in range(7) for y in range(7) if x + y > 2
             ) * 100, 1)
+
+            # Favorito Poisson vs cuota de mercado
+            if prob_poisson_calibrado_local >= prob_poisson_visita_cal:
+                fav_nombre  = m_l
+                fav_prob    = round(prob_poisson_calibrado_local * 100, 1)
+                fav_cuota   = c_l
+                fav_emoji   = "🏠"
+            else:
+                fav_nombre  = m_v
+                fav_prob    = round(prob_poisson_visita_cal * 100, 1)
+                fav_cuota   = c_v
+                fav_emoji   = "🚩"
+
+            fav_mercado = round((1 / fav_cuota) * 100, 1) if fav_cuota > 0 else 0
+            fav_diff    = round(fav_prob - fav_mercado, 1)
+            fav_señal   = "⚠️ sin edge validado" if abs(fav_diff) < 3 else (
+                          "🔍 divergencia detectable" if fav_diff > 0 else "📉 mercado lo descuenta"
+            )
+
             decision_block = (
                 f"<b>╔{'═'*22}╗</b>\n"
                 f"<b>║   🚫  NO BET  —  SIN VALOR   ║</b>\n"
+                f"<b>╠{'═'*22}╣</b>\n"
+                f"<b>║  {fav_emoji} Favorito: {html.escape(fav_nombre[:12]):<12}║</b>\n"
+                f"<b>║  📊 Poisson {fav_prob}% vs Mkt {fav_mercado}%{' '*(3-len(str(fav_prob)))}║</b>\n"
+                f"<b>║  {fav_señal:<24}║</b>\n"
                 f"<b>╠{'═'*22}╣</b>\n"
                 f"<b>║  💡 MERCADOS ALTERNATIVOS    ║</b>\n"
                 f"<b>║  ⚽ Over 2.5  → {prob_over25}%{' '*(14-len(str(prob_over25)))}║</b>\n"
