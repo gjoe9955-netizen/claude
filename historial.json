@@ -80,5 +80,18 @@
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
         "status": "⏳ PENDIENTE"
+    },
+    {
+        "fecha": "2026-05-04 01:15",
+        "partido": "Sevilla FC vs Real Sociedad de Fútbol",
+        "pick": "Real Sociedad de Fútbol",
+        "poisson": "50.9%",
+        "cuota": 2.9,
+        "edge": "16.9%",
+        "stake": "1.66%",
+        "nivel": "ORO 🥇",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
