@@ -1687,8 +1687,12 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
     auditoria_limpia = _re.sub(r'<[^>]+>', '', auditoria_raw or '')
     auditoria_limpia = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', auditoria_limpia)
     auditoria_limpia = _re.sub(r'\*(.+?)\*', r'<i>\1</i>', auditoria_limpia)
-    auditoria_limpia = auditoria_limpia[:600]
-    auditor_block    = f"\n\n<b>◆ AUDITOR</b>\n{auditoria_limpia}" if auditoria_limpia else ""
+    auditoria_limpia = auditoria_limpia[:500]
+    if len(auditoria_limpia) == 500:
+        ultimo_punto = auditoria_limpia.rfind('.')
+        if ultimo_punto > 200:
+            auditoria_limpia = auditoria_limpia[:ultimo_punto + 1]
+    auditor_block = f"\n\n<b>◆ AUDITOR</b>\n{auditoria_limpia}" if auditoria_limpia else ""
 
     footer = (
         f"\n\n<i>{'—'*18}\n"
