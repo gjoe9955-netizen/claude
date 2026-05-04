@@ -1684,7 +1684,10 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
         nodos_txt     += f" · 🛡 <code>{SISTEMA_IA['auditor']['api']}</code>"
 
     # Fix MESSAGE_TOO_LONG — limitar textos y partir en partes si es necesario
-    auditoria_limpia = html.escape(_re.sub(r'<[^>]+>', '', auditoria_raw or ''))[:600]
+    auditoria_limpia = _re.sub(r'<[^>]+>', '', auditoria_raw or '')
+    auditoria_limpia = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', auditoria_limpia)
+    auditoria_limpia = _re.sub(r'\*(.+?)\*', r'<i>\1</i>', auditoria_limpia)
+    auditoria_limpia = auditoria_limpia[:600]
     auditor_block    = f"\n\n<b>◆ AUDITOR</b>\n{auditoria_limpia}" if auditoria_limpia else ""
 
     footer = f"\n\n<i>{'—'*18}\nV12 · {nodos_txt} · ⚙️ Gwero 👷‍♂️</i>"
