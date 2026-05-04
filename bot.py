@@ -1690,7 +1690,12 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
     auditoria_limpia = auditoria_limpia[:600]
     auditor_block    = f"\n\n<b>◆ AUDITOR</b>\n{auditoria_limpia}" if auditoria_limpia else ""
 
-    footer = f"\n\n<i>{'—'*18}\nV12 · {nodos_txt} · ⚙️ Gwero 👷‍♂️</i>"
+    footer = (
+        f"\n\n<i>{'—'*18}\n"
+        f"⚽ {html.escape(m_l)} vs {html.escape(m_v)}\n"
+        f"📅 {fecha_hoy} · hora Juárez\n"
+        f"V12 · {nodos_txt} · ⚙️ Gwero 👷‍♂️</i>"
+    )
     final  = f"{header}{analisis}{auditor_block}{footer}"
 
     partes = [final[i:i+4066] for i in range(0, len(final), 4066)]
