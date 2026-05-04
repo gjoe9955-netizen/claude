@@ -726,7 +726,7 @@ async def api_football_call(endpoint, _raise_on_error=False):
         r = await asyncio.to_thread(
             requests.get,
             f"https://api.football-data.org/v4/competitions/PD/{endpoint}",
-            headers=headers, timeout=20
+            headers=headers, timeout=30
         )
         if r.status_code == 200:
             return r.json()
