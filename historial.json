@@ -1,1 +1,15 @@
-[]
+[
+    {
+        "fecha": "2026-05-04 13:33",
+        "partido": "Sevilla FC vs Real Sociedad de Fútbol",
+        "pick": "Real Sociedad de Fútbol",
+        "poisson": "51.3%",
+        "cuota": 3.71,
+        "edge": "16.0%",
+        "stake": "0.75%",
+        "nivel": "PLATA 🥈",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
+    }
+]
