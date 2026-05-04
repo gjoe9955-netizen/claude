@@ -1650,7 +1650,10 @@ Sé directo, técnico y conciso. No repitas los números del header, interpréta
 """
 
     analisis_raw = await ejecutar_ia("estratega", prompt_e)
-    analisis     = html.escape(_re.sub(r"<[^>]+>", "", analisis_raw or ""))[:1800]
+    analisis_limpio = _re.sub(r"<[^>]+>", "", analisis_raw or "")
+    analisis_limpio = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', analisis_limpio)
+    analisis_limpio = _re.sub(r'\*(.+?)\*', r'<i>\1</i>', analisis_limpio)
+    analisis        = analisis_limpio[:1800]
     nodos_txt    = f"🛰 <code>{SISTEMA_IA['estratega']['api']}</code>"
 
     auditoria_raw = ""
