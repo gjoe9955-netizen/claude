@@ -1254,10 +1254,18 @@ async def handle_pronostico(message):
         stake             = max(0.25, min(stake, tope_kelly))
 
         # Kelly IA — ajuste de stake con contexto LaLiga
+        if stake < 0.75:     nivel = "BRONCE 🥉"
+        elif stake < 1.25:   nivel = "PLATA 🥈"
+        elif stake < 2.0:    nivel = "ORO 🥇"
+        elif stake < 3.5:    nivel = "DIAMANTE 💎"
+        else:                nivel = "ÉLITE 🏆"
+
+        # Kelly IA — ajuste de stake con contexto LaLiga
         kelly_result = await evaluar_kelly_ia({
+            
             "local": m_l, "visita": m_v,
             "edge_l": edge_ajustado * 100, "edge_e": edge_empate * 100, "edge_v": edge_visita * 100,
-            "stake": stake, "pick": nombre_pick, "nivel": "",
+            "stake": stake, "pick": nombre_pick, "nivel": nivel,
             "shin_z": shin_z, "shin_confianza": shin_confianza,
             "std_l": std_l, "std_v": std_v,
             "forma_l": forma_local_txt, "forma_v": forma_visita_txt,
