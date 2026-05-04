@@ -1502,7 +1502,7 @@ async def handle_pronostico(message):
         decision_block = (
             f"<b>╔{'═'*22}╗</b>\n"
             f"<b>║  {nivel:<22}║</b>\n"
-            f"<b>║  {tipo_emoji} {pick_final:<20}║</b>\n"
+            f"<b>║  {tipo_emoji} {pick_corto:<20}║</b>\n"
             f"<b>║  💰 Stake: {stake}% del bankroll{' '*(9-len(str(stake)))}║</b>\n"
             f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_principal*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
             f"<b>║  🎯 Kelly IA: {razon_kelly[:20]:<20}║</b>\n"
