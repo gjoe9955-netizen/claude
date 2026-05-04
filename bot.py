@@ -36,7 +36,7 @@ RAPIDAPI_HOST     = "sportapi7.p.rapidapi.com"
 
 TU_CHAT_ID    = int(os.getenv("CHAT_ID", "0"))
 OFFSET_JUAREZ = -6
-URL_JSON      = "https://raw.githubusercontent.com/gjoe9955-netizen/claude/main/modelo_poisson.json"
+URL_JSON      = "https://api.github.com/repos/gjoe9955-netizen/claude/contents/modelo_poisson.json"
 REPO_OWNER    = "gjoe9955-netizen"
 REPO_NAME     = "claude"
 FILE_PATH     = "historial.json"
@@ -165,14 +165,24 @@ async def obtener_modelo():
     ahora = datetime.now(timezone.utc)
     if _MODELO_CACHE["data"] and _MODELO_CACHE["ts"] and (ahora - _MODELO_CACHE["ts"]).total_seconds() < CACHE_TTL_SEGUNDOS:
         return _MODELO_CACHE["data"], True
+    
     try:
-        r = await asyncio.to_thread(requests.get, URL_JSON, timeout=10)
+        # Agregamos los headers necesarios para repo privado
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3.raw"  # Esto permite leer el JSON directamente
+        }
+        r = await asyncio.to_thread(requests.get, URL_JSON, headers=headers, timeout=10)
+        
         if r.status_code == 200:
             _MODELO_CACHE["data"] = r.json()
             _MODELO_CACHE["ts"]   = ahora
             return _MODELO_CACHE["data"], True
-    except:
-        pass
+        else:
+            logging.error(f"Error al cargar JSON: {r.status_code}")
+    except Exception as e:
+        logging.error(f"Excepción en obtener_modelo: {e}")
+        
     return _MODELO_CACHE["data"], False
 
 
@@ -473,20 +483,23 @@ async def _github_get(file_path: str) -> tuple:
 
 
 async def _github_put(file_path: str, contenido: dict, sha: str = None, mensaje: str = "🤖 Update"):
-    url     = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json" # Formato estándar para enviar datos
+    }
+    # El contenido debe ir en Base64
     payload = {
         "message": mensaje,
         "content": base64.b64encode(json.dumps(contenido, indent=2, ensure_ascii=False).encode()).decode()
     }
     if sha:
         payload["sha"] = sha
+    
     try:
+        # Cambiamos a json=payload para que requests maneje el Content-Type correctamente
         r = await asyncio.to_thread(requests.put, url, headers=headers, json=payload, timeout=15)
-        if r.status_code not in (200, 201):
-            logging.error(f"[GitHub PUT] {file_path}: HTTP {r.status_code}")
-            return False
-        return True
+        return r.status_code in (200, 201)
     except Exception as e:
         logging.error(f"[GitHub PUT] {file_path}: {e}")
         return False
