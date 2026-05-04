@@ -80,7 +80,8 @@
         "nivel": "PLATA 🥈",
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
-        "status": "⏳ PENDIENTE"
+        "status": "✅ WIN",
+        "marcador_real": "2-1"
     },
     {
         "fecha": "2026-05-04 01:15",
@@ -93,6 +94,7 @@
         "nivel": "ORO 🥇",
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
-        "status": "⏳ PENDIENTE"
+        "status": "✅ WIN",
+        "marcador_real": "2-1"
     }
 ]
