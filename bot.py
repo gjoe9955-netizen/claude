@@ -1500,13 +1500,12 @@ async def handle_pronostico(message):
             )
     else:
         decision_block = (
-            f"<b>╔{'═'*22}╗</b>\n"
-            f"<b>║  {nivel:<22}║</b>\n"
+            f"<b>╔══════════════════════╗</b>\n"
+            f"<b>║  {nivel.split()[0]:<8} {nivel.split()[1] if len(nivel.split())>1 else '':<12}║</b>\n"
             f"<b>║  {tipo_emoji} {pick_corto:<20}║</b>\n"
-            f"<b>║  💰 Stake: {stake}%  Nivel: {nivel.split()[0]:<7}║</b>\n"
-            f"<b>║  📈 Prob: {p_percent:.1f}%  Edge: {edge_principal*100:.1f}%{' '*(6-len(f'{p_percent:.1f}'))}║</b>\n"
-            f"<b>║  🎯 Kelly IA: {razon_kelly[:20]:<20}║</b>\n"
-            f"<b>╚{'═'*22}╝</b>\n"
+            f"<b>║  💰 {stake}%  📈 {p_percent:.1f}%  ⚡{edge_principal*100:.1f}%{' '*(3-len(str(stake)))}║</b>\n"
+            f"<b>║  📊 {razon_kelly[:22]:<22}║</b>\n"
+            f"<b>╚══════════════════════╝</b>\n"
         )
 
     p_local_pct  = prob_poisson_calibrado_local * 100
