@@ -486,9 +486,18 @@ async def _github_put(file_path: str, contenido: dict, sha: str = None, mensaje:
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{file_path}"
     headers = {
         "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github.v3+json" # Formato estándar para enviar datos
+        "Accept": "application/vnd.github.v3+json"
     }
-    # El contenido debe ir en Base64
+    
+    # --- MEJORA: Si no hay SHA, intentamos obtenerlo para evitar error 409 Conflict ---
+    if not sha:
+        try:
+            r_check = await asyncio.to_thread(requests.get, url, headers=headers, timeout=10)
+            if r_check.status_code == 200:
+                sha = r_check.json().get('sha')
+        except Exception as e:
+            logging.error(f"No se pudo obtener SHA previo para {file_path}: {e}")
+
     payload = {
         "message": mensaje,
         "content": base64.b64encode(json.dumps(contenido, indent=2, ensure_ascii=False).encode()).decode()
@@ -497,9 +506,12 @@ async def _github_put(file_path: str, contenido: dict, sha: str = None, mensaje:
         payload["sha"] = sha
     
     try:
-        # Cambiamos a json=payload para que requests maneje el Content-Type correctamente
         r = await asyncio.to_thread(requests.put, url, headers=headers, json=payload, timeout=15)
-        return r.status_code in (200, 201)
+        if r.status_code in (200, 201):
+            return True
+        else:
+            logging.error(f"Error en PUT {file_path}: {r.status_code} - {r.text}")
+            return False
     except Exception as e:
         logging.error(f"[GitHub PUT] {file_path}: {e}")
         return False
