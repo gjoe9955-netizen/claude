@@ -11,7 +11,7 @@ GROQ_KEY_2 = os.getenv('GROQ_API_KEY_2')
 EDGE_MINIMO = 0.04  # 4% — ruido estadístico en LaLiga top-6
 
 # Top 6 LaLiga — mercado muy eficiente, edge < 4% es ruido
-TOP6_LALIGA = {"real madrid", "barcelona", "atletico", "atlético", "athletic", "real sociedad", "betis"}
+TOP6_LALIGA = {"real madrid", "barcelona", "atletico", "atlético", "athletic", "real sociedad", "betis", "atletico madrid"}
 
 
 async def _call_groq(prompt: str, api_key: str) -> str:
