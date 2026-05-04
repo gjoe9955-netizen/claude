@@ -1442,6 +1442,11 @@ async def handle_pronostico(message):
     zona_gris_txt = " · 🌫 Zona gris (mercado eficiente)" if zona_gris else ""
     tipo_emoji    = {"local": "🏠", "empate": "🤝", "visita": "🚩"}.get(tipo_pick if pick_final != "No Bet" else "", "")
 
+    # Nombres cortos para cuadro principal
+    nombre_corto_l = NOMBRES_ODDS_API.get(m_l, m_l)[:12]
+    nombre_corto_v = NOMBRES_ODDS_API.get(m_v, m_v)[:12]
+    pick_corto     = NOMBRES_ODDS_API.get(pick_final, pick_final)[:14] if pick_final != "No Bet" else "No Bet"
+
     if pick_final == "No Bet":
         if pick_riesgo_nombre:
             decision_block = (
