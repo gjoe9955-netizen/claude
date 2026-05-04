@@ -764,8 +764,8 @@ async def obtener_partidos_finished() -> list:
             _PARTIDOS_FD_CACHE["ts"]   = ahora
             logging.info(f"[FD] ✅ {len(data['matches'])} partidos FINISHED en cache.")
             return data["matches"]
-    except Exception as e:
-        logging.error(f"[FD] Error partidos FINISHED: {e}")
+    except (TimeoutError, Exception) as e:
+        logging.warning(f"[FD] Timeout/Error partidos FINISHED: {e} — usando cache")
     return _PARTIDOS_FD_CACHE["data"] or []
 
 
