@@ -12,5 +12,18 @@
         "stake_riesgo": "0.25%",
         "status": "✅ WIN",
         "marcador_real": "2-1"
+    },
+    {
+        "fecha": "2026-05-06 10:46",
+        "partido": "Levante UD vs CA Osasuna",
+        "pick": "CA Osasuna",
+        "poisson": "42.6%",
+        "cuota": 2.98,
+        "edge": "9.2%",
+        "stake": "0.75%",
+        "nivel": "PLATA 🥈",
+        "pick_riesgo": "Empate",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
