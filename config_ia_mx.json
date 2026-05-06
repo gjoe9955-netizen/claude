@@ -4,7 +4,7 @@
     "nodo": "Meta-Llama-3.3-70B-Instruct [EST] | 95%"
   },
   "auditor": {
-    "api": null,
-    "nodo": null
+    "api": "GROQ",
+    "nodo": "meta-llama/llama-4-scout-17b-16e-instruct [AUD] | 98%"
   }
 }
