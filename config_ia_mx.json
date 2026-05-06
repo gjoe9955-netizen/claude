@@ -1,0 +1,10 @@
+{
+  "estratega": {
+    "api": "SAMBA",
+    "nodo": "Meta-Llama-3.3-70B-Instruct [EST] | 95%"
+  },
+  "auditor": {
+    "api": null,
+    "nodo": null
+  }
+}
