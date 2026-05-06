@@ -24,5 +24,18 @@
     "pick_riesgo": "Empate",
     "stake_riesgo": "0.25%",
     "status": "⏳ PENDIENTE"
+  },
+  {
+    "fecha": "2026-05-05 23:37",
+    "partido": "Guadalajara vs Tigres UANL",
+    "pick": "Tigres UANL",
+    "poisson": "34.4%",
+    "cuota": 4.0,
+    "edge": "5.9%",
+    "stake": "0.27%",
+    "nivel": "BRONCE 🥉",
+    "pick_riesgo": "Empate",
+    "stake_riesgo": "0.25%",
+    "status": "⏳ PENDIENTE"
   }
 ]
