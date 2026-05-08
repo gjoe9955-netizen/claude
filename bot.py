@@ -554,8 +554,11 @@ SISTEMA_IA = {
     "estratega": {"api": None, "nodo": None},
     "auditor":   {"api": None, "nodo": None},
     "nodos_samba": [
-        "DeepSeek-V3.1-cb [EST] | 99%",
-        "DeepSeek-V3.1 [EST] | 95%",
+        "DeepSeek-V3.1 [EST] | 99%",
+        "DeepSeek-V3.1-cb [EST] | 95%",
+        "Llama-4-Maverick-17B-128E-Instruct [EST] | 92%",
+        "Meta-Llama-3.3-70B-Instruct [EST] | 88%",
+        "gemma-3-12b-it [AUD] | 85%",
     ],
     "nodos_groq": [
         "llama-3.3-70b-versatile [EST] | 99%",
