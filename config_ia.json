@@ -1,10 +1,10 @@
 {
   "estratega": {
     "api": "SAMBA",
-    "nodo": "DeepSeek-V3.2 [EST] | 99%"
+    "nodo": "DeepSeek-V3.1 [EST] | 99%"
   },
   "auditor": {
     "api": "GROQ",
-    "nodo": "qwen/qwen3-32b [EST] | 90%"
+    "nodo": "meta-llama/llama-4-scout-17b-16e-instruct [AUD] | 98%"
   }
 }
