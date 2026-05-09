@@ -12,5 +12,18 @@
         "stake_riesgo": "0.25%",
         "status": "❌ LOSS",
         "marcador_real": "3-2"
+    },
+    {
+        "fecha": "2026-05-09 09:33",
+        "partido": "Sevilla FC vs RCD Espanyol de Barcelona",
+        "pick": "RCD Espanyol de Barcelona",
+        "poisson": "29.9%",
+        "cuota": 5.16,
+        "edge": "6.4%",
+        "stake": "0.75%",
+        "nivel": "PLATA 🥈",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
