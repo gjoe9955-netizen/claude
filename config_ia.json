@@ -5,6 +5,6 @@
   },
   "auditor": {
     "api": "GROQ",
-    "nodo": "llama-3.3-70b-versatile [EST] | 99%"
+    "nodo": "meta-llama/llama-4-scout-17b-16e-instruct [AUD] | 98%"
   }
 }
