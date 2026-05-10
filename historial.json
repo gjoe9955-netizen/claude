@@ -38,5 +38,18 @@
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
         "status": "⏳ PENDIENTE"
+    },
+    {
+        "fecha": "2026-05-09 20:00",
+        "partido": "Athletic Club vs Valencia CF",
+        "pick": "Valencia CF",
+        "poisson": "28.7%",
+        "cuota": 4.0,
+        "edge": "1.9%",
+        "stake": "0.25%",
+        "nivel": "BRONCE 🥉",
+        "pick_riesgo": "Empate",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
