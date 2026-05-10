@@ -25,5 +25,18 @@
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
         "status": "⏳ PENDIENTE"
+    },
+    {
+        "fecha": "2026-05-09 19:55",
+        "partido": "RCD Mallorca vs Villarreal CF",
+        "pick": "Villarreal CF",
+        "poisson": "51.9%",
+        "cuota": 4.0,
+        "edge": "18.1%",
+        "stake": "0.63%",
+        "nivel": "BRONCE 🥉",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
