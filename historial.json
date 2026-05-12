@@ -54,5 +54,18 @@
         "stake_riesgo": "0.25%",
         "status": "✅ WIN",
         "marcador_real": "2-0"
+    },
+    {
+        "fecha": "2026-05-12 10:25",
+        "partido": "Real Betis Balompié vs Elche CF",
+        "pick": "Real Betis Balompié",
+        "poisson": "60.3%",
+        "cuota": 1.64,
+        "edge": "4.5%",
+        "stake": "1.48%",
+        "nivel": "ORO 🥇",
+        "pick_riesgo": "1-1",
+        "stake_riesgo": "0.25%",
+        "status": "⏳ PENDIENTE"
     }
 ]
