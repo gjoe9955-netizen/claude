@@ -66,6 +66,7 @@
         "nivel": "ORO 🥇",
         "pick_riesgo": "1-1",
         "stake_riesgo": "0.25%",
-        "status": "⏳ PENDIENTE"
+        "status": "❌ LOSS",
+        "marcador_real": "1-1"
     }
 ]
